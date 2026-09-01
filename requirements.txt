@@ -1,0 +1,2 @@
+# trintrin runs on the Python standard library alone - there is nothing to install.
+# This file exists so `pip install -r requirements.txt` is a no-op rather than an error.

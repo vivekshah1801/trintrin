@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trintrin</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --sunken: #f0f2f5; --border: #d8dce3;
+    --text: #14181f; --muted: #667085; --accent: #1f6feb; --accent-fg: #ffffff;
+    --row-alt: #fafbfc; --row-sel: #e8f0fe; --ok: #1a7f37; --bad: #b42318;
+    --error-bg: #fdecec; --error-fg: #9a2020;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116; --panel: #161b22; --sunken: #0b0f14; --border: #2a313c;
+      --text: #e6edf3; --muted: #8b949e; --accent: #388bfd; --accent-fg: #ffffff;
+      --row-alt: #12171e; --row-sel: #16324d; --ok: #3fb950; --bad: #f85149;
+      --error-bg: #3a1c1c; --error-fg: #ff9c9c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+         font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--text); }
+  input, textarea, button { font-family: inherit; font-size: 13px; color: var(--text);
+         background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+  input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; font-weight: 600; }
+  button:disabled { opacity: 0.55; cursor: default; }
+  button.link { border: 0; background: none; color: var(--accent); padding: 2px 4px; }
+  label.check { display: flex; gap: 7px; align-items: center; color: var(--text); cursor: pointer; padding: 3px 0; }
+
+  header { display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+           padding: 9px 13px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .brand { font-weight: 700; letter-spacing: -0.02em; font-size: 15px; margin-right: 6px; }
+  .brand span { color: var(--accent); }
+  .cap { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  #server { width: 205px; font-family: var(--mono); font-size: 12px; }
+  #user { width: 100px; }
+  #pill { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  #dot.ok { background: var(--ok); } #dot.bad { background: var(--bad); }
+  .spacer { margin-left: auto; }
+
+  .pop { position: relative; }
+  .pop > .sheet { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
+                  min-width: 235px; max-height: 60vh; overflow: auto; padding: 10px;
+                  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+                  box-shadow: 0 8px 26px rgba(0,0,0,0.18); }
+  .pop.open > .sheet { display: block; }
+  .sheet h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .sheet .actions { display: flex; gap: 6px; margin-bottom: 8px; }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+  aside { width: 268px; flex: none; display: flex; flex-direction: column;
+          background: var(--panel); border-right: 1px solid var(--border); }
+  aside.hidden { display: none; }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tabs button { flex: 1; border: 0; border-radius: 0; background: var(--sunken); color: var(--muted);
+                 padding: 7px 0; font-weight: 600; font-size: 12px; }
+  .tabs button.on { background: var(--panel); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+  .pane { flex: 1; overflow: auto; padding: 8px; display: none; }
+  .pane.on { display: block; }
+  .pane .bar { display: flex; gap: 6px; margin-bottom: 8px; }
+  .pane .bar input { flex: 1; min-width: 0; }
+
+  ul.tree, ul.tree ul { list-style: none; margin: 0; padding: 0; }
+  ul.tree ul { margin-left: 11px; border-left: 1px solid var(--border); padding-left: 6px; }
+  .node { display: flex; align-items: center; gap: 4px; padding: 2px 3px; border-radius: 5px; }
+  .node:hover { background: var(--sunken); }
+  .node .tw { width: 13px; flex: none; color: var(--muted); cursor: pointer; user-select: none; font-size: 10px; }
+  .node .nm { flex: 1; cursor: pointer; font-family: var(--mono); font-size: 12px;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .node .ty { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .node .go { opacity: 0; border: 0; background: none; color: var(--accent); padding: 0 3px; font-size: 11px; }
+  .node:hover .go { opacity: 1; }
+  .leaf .nm { cursor: default; }
+  .note { color: var(--muted); padding: 6px 3px; font-size: 12px; }
+
+  .saved-item { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 5px; }
+  .saved-item:hover { background: var(--sunken); }
+  .saved-item .nm { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .saved-item .del { border: 0; background: none; color: var(--muted); padding: 0 4px; }
+  .saved-item .del:hover { color: var(--bad); }
+
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .editor { padding: 9px 13px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  #sql { width: 100%; min-height: 88px; resize: vertical; font-family: var(--mono);
+         font-size: 12.5px; line-height: 1.5; white-space: pre; overflow-x: auto; }
+  .editor .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .hint { color: var(--muted); font-size: 11.5px; }
+  #error { display: none; margin: 0; padding: 9px 13px; background: var(--error-bg); color: var(--error-fg);
+           font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word;
+           border-bottom: 1px solid var(--border); }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+             padding: 7px 13px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  #search { width: 210px; }
+  #status { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .grid { flex: 1; overflow: auto; }
+  table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+  th, td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+           padding: 5px 9px; text-align: left; vertical-align: top; max-width: 460px;
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  thead th { position: sticky; top: 0; z-index: 2; background: var(--panel); cursor: pointer;
+             user-select: none; font-weight: 620; white-space: nowrap; }
+  thead tr.filters th { top: 30px; padding: 3px 4px; cursor: default; }
+  thead tr.filters input { width: 100%; min-width: 88px; padding: 2px 5px; font-size: 12px; }
+  th .arrow { color: var(--accent); margin-left: 4px; }
+  tbody td { font-family: var(--mono); font-size: 12px; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tbody tr.selected { background: var(--row-sel); }
+  td.null { color: var(--muted); font-style: italic; }
+  .pick { width: 30px; text-align: center; padding: 4px; }
+  .empty { padding: 22px 14px; color: var(--muted); }
+
+  footer { display: flex; align-items: center; gap: 14px; padding: 4px 13px;
+           background: var(--panel); border-top: 1px solid var(--border); }
+  footer pre { margin: 0; font-family: var(--mono); font-size: 8.5px; line-height: 1.15;
+               color: var(--muted); white-space: pre; }
+  footer .tagline { color: var(--muted); font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">trin<span>trin</span></span>
+  <button id="toggleSide" title="Show or hide the sidebar">☰</button>
+  <span class="cap">Host</span>
+  <input id="server" value="http://localhost:28080" spellcheck="false">
+  <span class="cap">User</span>
+  <input id="user" value="trintrin" spellcheck="false">
+  <button id="test">Test connection</button>
+  <span id="pill"><span id="dot"></span><span id="pillText">not tested</span></span>
+  <div class="pop spacer" id="settingsPop">
+    <button id="settingsBtn">⚙ Settings</button>
+    <div class="sheet">
+      <h3>Settings</h3>
+      <label class="check"><input type="checkbox" id="hideHudi"> Hide Hudi metadata columns by default</label>
+      <div class="hint">Applies to every new result set. Columns starting with <code>_hoodie_</code> are hidden;
+        you can still re-enable them per query from the Columns menu.</div>
+    </div>
+  </div>
+</header>
+
+<div class="body">
+  <aside id="side">
+    <div class="tabs">
+      <button data-pane="explore" class="on">Explore</button>
+      <button data-pane="saved">Saved queries</button>
+    </div>
+
+    <div class="pane on" id="pane-explore">
+      <div class="bar">
+        <input id="treeFilter" type="search" placeholder="Filter loaded names…" spellcheck="false">
+        <button id="reload" title="Reload catalogs">⟳</button>
+      </div>
+      <ul class="tree" id="tree"></ul>
+      <div class="note" id="treeNote">Loading catalogs…</div>
+    </div>
+
+    <div class="pane" id="pane-saved">
+      <div class="bar">
+        <button id="saveCurrent" class="primary" style="flex:1">Save current query</button>
+      </div>
+      <div id="savedList"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="editor">
+      <textarea id="sql" spellcheck="false" placeholder='SELECT * FROM tpch.sf1.nation LIMIT 100'></textarea>
+      <div class="row">
+        <button id="run" class="primary">Run query</button>
+        <span class="hint">⌘/Ctrl + Enter to run</span>
+      </div>
+    </div>
+
+    <pre id="error"></pre>
+
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Search all visible columns…" spellcheck="false">
+      <div class="pop" id="colsPop">
+        <button id="colsBtn">Columns</button>
+        <div class="sheet">
+          <h3>Visible columns</h3>
+          <div class="actions">
+            <button id="colsAll">All</button>
+            <button id="colsNone">None</button>
+            <button id="colsNoHudi">Hide _hoodie_</button>
+          </div>
+          <div id="colsList"></div>
+        </div>
+      </div>
+      <button id="clear">Clear filters</button>
+      <button id="download">Download CSV</button>
+      <span id="status">No query run yet</span>
+    </div>
+
+    <div class="grid">
+      <div class="empty" id="empty">Run a query, or pick a table from the Explore panel.</div>
+      <table id="table" hidden>
+        <thead><tr id="head"></tr><tr class="filters" id="filterRow"></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<footer>
+  <pre>          ( (
+           ) )
+ (•ᴗ•)   .____.
+ /(  )___|    |]
+  / \    `----'</pre>
+  <span class="tagline">trintrin · sip while it scans</span>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var RENDER_CAP = 3000;
+  var HUDI = /^_hoodie_/;
+  var el = function (id) { return document.getElementById(id); };
+
+  var state = {
+    columns: [], rows: [], filters: [], hidden: new Set(),
+    search: '', sort: null, selected: new Set(), view: []
+  };
+  var settings = { hideHudi: true };
+  var saved = [];
+
+  /* ---------- persistence (localStorage may throw in private mode) ---------- */
+
+  function load(key, fallback) {
+    try {
+      var raw = localStorage.getItem('trintrin.' + key);
+      return raw === null ? fallback : JSON.parse(raw);
+    } catch (e) { return fallback; }
+  }
+  function store(key, value) {
+    try { localStorage.setItem('trintrin.' + key, JSON.stringify(value)); } catch (e) { /* ignore */ }
+  }
+
+  /* ---------- helpers ---------- */
+
+  function text(value) { return value === null || value === undefined ? '' : String(value); }
+  function quote(name) { return '"' + String(name).replace(/"/g, '""') + '"'; }
+  function visibleColumns() {
+    var out = [];
+    for (var i = 0; i < state.columns.length; i++) { if (!state.hidden.has(i)) { out.push(i); } }
+    return out;
+  }
+  function showError(message) {
+    var box = el('error');
+    box.textContent = message || '';
+    box.style.display = message ? 'block' : 'none';
+  }
+
+  function ask(server, user, path, payload) {
+    payload.server = server;
+    payload.user = user;
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (response) { return response.json(); }).then(function (result) {
+      if (result.error) { throw new Error(result.error); }
+      return result;
+    });
+  }
+  function query(sql) {
+    return ask(el('server').value.trim(), el('user').value.trim(), '/api/query', { sql: sql });
+  }
+
+  /* ---------- connection test ---------- */
+
+  function setPill(kind, message) {
+    el('dot').className = kind;
+    el('pillText').textContent = message;
+  }
+
+  el('test').addEventListener('click', function () {
+    var button = el('test');
+    button.disabled = true;
+    setPill('', 'testing…');
+    ask(el('server').value.trim(), el('user').value.trim(), '/api/ping', {}).then(function (info) {
+      setPill('ok', 'Trino ' + info.version + ' · ' + info.environment + ' · ' + info.state.toLowerCase() +
+                    ' · up ' + info.uptime + ' · ' + info.elapsed_ms + ' ms');
+      showError('');
+      store('server', el('server').value.trim());
+      store('user', el('user').value.trim());
+      loadCatalogs();
+    }).catch(function (error) {
+      setPill('bad', 'unreachable');
+      showError(String(error.message || error));
+    }).then(function () { button.disabled = false; });
+  });
+
+  /* ---------- explorer: catalogs > schemas > tables > columns ---------- */
+
+  function makeNode(label, type, options) {
+    var li = document.createElement('li');
+    var node = document.createElement('div');
+    node.className = 'node' + (options.leaf ? ' leaf' : '');
+
+    var twisty = document.createElement('span');
+    twisty.className = 'tw';
+    twisty.textContent = options.leaf ? '' : '▸';
+    node.appendChild(twisty);
+
+    var name = document.createElement('span');
+    name.className = 'nm';
+    name.textContent = label;
+    name.title = label;
+    node.appendChild(name);
+
+    if (type) {
+      var kind = document.createElement('span');
+      kind.className = 'ty';
+      kind.textContent = type;
+      node.appendChild(kind);
+    }
+    if (options.onRun) {
+      var go = document.createElement('button');
+      go.className = 'go';
+      go.textContent = '▶';
+      go.title = 'Query this table';
+      go.addEventListener('click', function (event) { event.stopPropagation(); options.onRun(); });
+      node.appendChild(go);
+    }
+
+    li.appendChild(node);
+    if (options.leaf) { return li; }
+
+    var children = document.createElement('ul');
+    children.hidden = true;
+    li.appendChild(children);
+
+    var loaded = false;
+    var toggle = function () {
+      children.hidden = !children.hidden;
+      twisty.textContent = children.hidden ? '▸' : '▾';
+      if (!loaded && !children.hidden) {
+        loaded = true;
+        var pending = document.createElement('li');
+        pending.className = 'note';
+        pending.textContent = 'loading…';
+        children.appendChild(pending);
+        options.expand(children).catch(function (error) {
+          children.textContent = '';
+          var failed = document.createElement('li');
+          failed.className = 'note';
+          failed.textContent = String(error.message || error);
+          children.appendChild(failed);
+          loaded = false;
+        });
+      }
+    };
+    twisty.addEventListener('click', toggle);
+    name.addEventListener('click', function () { toggle(); if (options.onSelect) { options.onSelect(); } });
+    return li;
+  }
+
+  function fill(container, rows, build) {
+    container.textContent = '';
+    if (!rows.length) {
+      var none = document.createElement('li');
+      none.className = 'note';
+      none.textContent = 'empty';
+      container.appendChild(none);
+      return;
+    }
+    rows.forEach(function (row) { container.appendChild(build(row)); });
+  }
+
+  function tableNode(catalog, schema, table) {
+    var fqn = quote(catalog) + '.' + quote(schema) + '.' + quote(table);
+    var select = 'SELECT *\nFROM ' + fqn + '\nLIMIT 100';
+    return makeNode(table, '', {
+      onSelect: function () { el('sql').value = select; store('sql', select); },
+      onRun: function () { el('sql').value = select; store('sql', select); run(); },
+      expand: function (children) {
+        return query('DESCRIBE ' + fqn).then(function (result) {
+          fill(children, result.rows, function (row) {
+            return makeNode(row[0], row[1], { leaf: true });
+          });
+        });
+      }
+    });
+  }
+
+  function schemaNode(catalog, schema) {
+    return makeNode(schema, '', {
+      expand: function (children) {
+        return query('SHOW TABLES FROM ' + quote(catalog) + '.' + quote(schema)).then(function (result) {
+          fill(children, result.rows, function (row) { return tableNode(catalog, schema, row[0]); });
+        });
+      }
+    });
+  }
+
+  function catalogNode(catalog) {
+    return makeNode(catalog, '', {
+      expand: function (children) {
+        return query('SHOW SCHEMAS FROM ' + quote(catalog)).then(function (result) {
+          fill(children, result.rows, function (row) { return schemaNode(catalog, row[0]); });
+        });
+      }
+    });
+  }
+
+  function loadCatalogs() {
+    var tree = el('tree'), note = el('treeNote');
+    tree.textContent = '';
+    note.textContent = 'Loading catalogs…';
+    note.hidden = false;
+    query('SHOW CATALOGS').then(function (result) {
+      note.hidden = true;
+      result.rows.forEach(function (row) { tree.appendChild(catalogNode(row[0])); });
+    }).catch(function (error) {
+      note.hidden = false;
+      note.textContent = 'Could not list catalogs — ' + (error.message || error);
+    });
+  }
+
+  el('reload').addEventListener('click', loadCatalogs);
+  el('treeFilter').addEventListener('input', function () {
+    var needle = el('treeFilter').value.trim().toLowerCase();
+    var items = el('tree').querySelectorAll('li');
+    for (var i = 0; i < items.length; i++) {
+      var label = items[i].querySelector('.nm');
+      var hit = !needle || (label && label.textContent.toLowerCase().indexOf(needle) !== -1);
+      items[i].hidden = !hit && !items[i].querySelector('li:not([hidden])');
+    }
+  });
+
+  /* ---------- saved queries ---------- */
+
+  function renderSaved() {
+    var list = el('savedList');
+    list.textContent = '';
+    if (!saved.length) {
+      var note = document.createElement('div');
+      note.className = 'note';
+      note.textContent = 'Nothing saved yet. Write a query, then hit Save current query.';
+      list.appendChild(note);
+      return;
+    }
+    saved.forEach(function (item, index) {
+      var row = document.createElement('div');
+      row.className = 'saved-item';
+
+      var name = document.createElement('span');
+      name.className = 'nm';
+      name.textContent = item.name;
+      name.title = item.sql;
+      name.addEventListener('click', function () {
+        el('sql').value = item.sql;
+        store('sql', item.sql);
+      });
+      row.appendChild(name);
+
+      var remove = document.createElement('button');
+      remove.className = 'del';
+      remove.textContent = '✕';
+      remove.title = 'Delete';
+      remove.addEventListener('click', function () {
+        saved.splice(index, 1);
+        store('saved', saved);
+        renderSaved();
+      });
+      row.appendChild(remove);
+      list.appendChild(row);
+    });
+  }
+
+  el('saveCurrent').addEventListener('click', function () {
+    var sql = el('sql').value.trim();
+    if (!sql) { return; }
+    var name = window.prompt('Name this query', sql.split('\n')[0].slice(0, 60));
+    if (!name) { return; }
+    var existing = -1;
+    for (var i = 0; i < saved.length; i++) { if (saved[i].name === name) { existing = i; } }
+    if (existing >= 0) { saved[existing].sql = sql; } else { saved.push({ name: name, sql: sql }); }
+    store('saved', saved);
+    renderSaved();
+  });
+
+  /* ---------- results: columns, filters, sorting, selection ---------- */
+
+  function applyDefaultHiding() {
+    state.hidden = new Set();
+    if (settings.hideHudi) {
+      state.columns.forEach(function (name, index) { if (HUDI.test(name)) { state.hidden.add(index); } });
+    }
+  }
+
+  function renderColumnPicker() {
+    var list = el('colsList');
+    list.textContent = '';
+    state.columns.forEach(function (name, index) {
+      var label = document.createElement('label');
+      label.className = 'check';
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = !state.hidden.has(index);
+      box.addEventListener('change', function () {
+        if (box.checked) { state.hidden.delete(index); }
+        else { state.hidden.add(index); state.filters[index] = ''; }
+        redraw();
+      });
+      label.appendChild(box);
+      label.appendChild(document.createTextNode(name));
+      list.appendChild(label);
+    });
+    el('colsBtn').textContent = 'Columns (' + visibleColumns().length + '/' + state.columns.length + ')';
+  }
+
+  function matches(row) {
+    var visible = visibleColumns();
+    for (var i = 0; i < visible.length; i++) {
+      var needle = state.filters[visible[i]];
+      if (needle && text(row[visible[i]]).toLowerCase().indexOf(needle) === -1) { return false; }
+    }
+    if (!state.search) { return true; }
+    for (var j = 0; j < visible.length; j++) {
+      if (text(row[visible[j]]).toLowerCase().indexOf(state.search) !== -1) { return true; }
+    }
+    return false;
+  }
+
+  function compare(a, b, index) {
+    var left = a[index], right = b[index];
+    if (left === null || left === undefined) { return right === null || right === undefined ? 0 : 1; }
+    if (right === null || right === undefined) { return -1; }
+    var ln = Number(left), rn = Number(right);
+    if (left !== '' && right !== '' && !isNaN(ln) && !isNaN(rn)) { return ln - rn; }
+    return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  function recompute() {
+    var view = [];
+    for (var i = 0; i < state.rows.length; i++) { if (matches(state.rows[i])) { view.push(i); } }
+    if (state.sort && !state.hidden.has(state.sort.column)) {
+      var index = state.sort.column, sign = state.sort.direction === 'asc' ? 1 : -1;
+      view.sort(function (a, b) { return sign * compare(state.rows[a], state.rows[b], index); });
+    }
+    state.view = view;
+  }
+
+  function renderHead() {
+    var head = el('head'), filterRow = el('filterRow');
+    head.textContent = '';
+    filterRow.textContent = '';
+
+    var pick = document.createElement('th');
+    pick.className = 'pick';
+    var all = document.createElement('input');
+    all.type = 'checkbox';
+    all.id = 'selectAll';
+    all.title = 'Select every matching row';
+    all.addEventListener('change', function () {
+      state.view.forEach(function (i) { if (all.checked) { state.selected.add(i); } else { state.selected.delete(i); } });
+      renderBody();
+    });
+    pick.appendChild(all);
+    head.appendChild(pick);
+    var filterPick = document.createElement('th');
+    filterPick.className = 'pick';
+    filterRow.appendChild(filterPick);
+
+    visibleColumns().forEach(function (index) {
+      var th = document.createElement('th');
+      th.textContent = state.columns[index];
+      th.title = 'Sort by ' + state.columns[index];
+      if (state.sort && state.sort.column === index) {
+        var arrow = document.createElement('span');
+        arrow.className = 'arrow';
+        arrow.textContent = state.sort.direction === 'asc' ? '▲' : '▼';
+        th.appendChild(arrow);
+      }
+      th.addEventListener('click', function () {
+        if (!state.sort || state.sort.column !== index) { state.sort = { column: index, direction: 'asc' }; }
+        else if (state.sort.direction === 'asc') { state.sort = { column: index, direction: 'desc' }; }
+        else { state.sort = null; }
+        redraw();
+      });
+      head.appendChild(th);
+
+      var cell = document.createElement('th');
+      var input = document.createElement('input');
+      input.type = 'search';
+      input.placeholder = 'filter';
+      input.value = state.filters[index] || '';
+      input.addEventListener('input', function () {
+        state.filters[index] = input.value.trim().toLowerCase();
+        recompute();
+        renderBody();
+      });
+      cell.appendChild(input);
+      filterRow.appendChild(cell);
+    });
+  }
+
+  function renderBody() {
+    var body = el('body');
+    body.textContent = '';
+    var visible = visibleColumns();
+    var shown = Math.min(state.view.length, RENDER_CAP);
+    var fragment = document.createDocumentFragment();
+
+    for (var n = 0; n < shown; n++) {
+      var index = state.view[n], row = state.rows[index];
+      var tr = document.createElement('tr');
+      if (state.selected.has(index)) { tr.className = 'selected'; }
+
+      var pick = document.createElement('td');
+      pick.className = 'pick';
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = state.selected.has(index);
+      box.addEventListener('change', (function (rowIndex, trEl, checkbox) {
+        return function () {
+          if (checkbox.checked) { state.selected.add(rowIndex); trEl.className = 'selected'; }
+          else { state.selected.delete(rowIndex); trEl.className = ''; }
+          updateStatus();
+        };
+      })(index, tr, box));
+      pick.appendChild(box);
+      tr.appendChild(pick);
+
+      for (var c = 0; c < visible.length; c++) {
+        var value = row[visible[c]];
+        var td = document.createElement('td');
+        if (value === null || value === undefined) { td.textContent = 'NULL'; td.className = 'null'; }
+        else { td.textContent = String(value); td.title = String(value); }
+        tr.appendChild(td);
+      }
+      fragment.appendChild(tr);
+    }
+    body.appendChild(fragment);
+
+    var all = el('selectAll');
+    if (all) {
+      var picked = state.view.filter(function (i) { return state.selected.has(i); }).length;
+      all.checked = picked > 0 && picked === state.view.length;
+      all.indeterminate = picked > 0 && picked < state.view.length;
+    }
+    updateStatus(shown);
+  }
+
+  function redraw() {
+    renderColumnPicker();
+    renderHead();
+    recompute();
+    renderBody();
+  }
+
+  function updateStatus(shown) {
+    var parts = [state.view.length + ' of ' + state.rows.length + ' rows'];
+    if (state.selected.size) { parts.push(state.selected.size + ' selected'); }
+    if (state.hidden.size) { parts.push(state.hidden.size + ' columns hidden'); }
+    if (shown !== undefined && shown < state.view.length) { parts.push('showing first ' + shown); }
+    el('status').textContent = parts.join(' · ');
+  }
+
+  /* ---------- CSV export ---------- */
+
+  function csvCell(value) {
+    var cell = value === null || value === undefined ? '' : String(value);
+    return /[",\r\n]/.test(cell) ? '"' + cell.replace(/"/g, '""') + '"' : cell;
+  }
+
+  el('download').addEventListener('click', function () {
+    if (!state.columns.length) { return; }
+    var visible = visibleColumns();
+    var indices = state.selected.size
+      ? state.view.filter(function (i) { return state.selected.has(i); })
+      : state.view;
+    if (!indices.length || !visible.length) { return; }
+
+    var lines = [visible.map(function (i) { return csvCell(state.columns[i]); }).join(',')];
+    indices.forEach(function (i) {
+      lines.push(visible.map(function (c) { return csvCell(state.rows[i][c]); }).join(','));
+    });
+
+    var url = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trintrin_results.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+
+  /* ---------- run ---------- */
+
+  function run() {
+    var sql = el('sql').value.trim();
+    if (!sql) { return; }
+    store('server', el('server').value.trim());
+    store('user', el('user').value.trim());
+    store('sql', sql);
+
+    var button = el('run');
+    button.disabled = true;
+    button.textContent = 'Running…';
+    showError('');
+    el('status').textContent = 'Running…';
+    var started = Date.now();
+
+    query(sql).then(function (result) {
+      state.columns = result.columns || [];
+      state.rows = result.rows || [];
+      state.filters = state.columns.map(function () { return ''; });
+      state.selected = new Set();
+      state.sort = null;
+      state.search = '';
+      el('search').value = '';
+      applyDefaultHiding();
+      el('empty').hidden = true;
+      el('table').hidden = false;
+      redraw();
+      el('status').textContent = state.rows.length + ' rows in ' + (Date.now() - started) + ' ms';
+    }).catch(function (error) {
+      showError(String(error.message || error));
+      el('status').textContent = 'Query failed';
+    }).then(function () {
+      button.disabled = false;
+      button.textContent = 'Run query';
+    });
+  }
+
+  /* ---------- wiring ---------- */
+
+  el('run').addEventListener('click', run);
+  el('search').addEventListener('input', function () {
+    state.search = el('search').value.trim().toLowerCase();
+    recompute();
+    renderBody();
+  });
+  el('clear').addEventListener('click', function () {
+    state.filters = state.columns.map(function () { return ''; });
+    state.search = '';
+    el('search').value = '';
+    redraw();
+  });
+  el('colsAll').addEventListener('click', function () { state.hidden = new Set(); redraw(); });
+  el('colsNone').addEventListener('click', function () {
+    state.hidden = new Set(state.columns.map(function (_, i) { return i; }));
+    redraw();
+  });
+  el('colsNoHudi').addEventListener('click', function () {
+    state.columns.forEach(function (name, i) { if (HUDI.test(name)) { state.hidden.add(i); state.filters[i] = ''; } });
+    redraw();
+  });
+  el('hideHudi').addEventListener('change', function () {
+    settings.hideHudi = el('hideHudi').checked;
+    store('settings', settings);
+  });
+  el('toggleSide').addEventListener('click', function () { el('side').classList.toggle('hidden'); });
+
+  document.querySelectorAll('.tabs button').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      document.querySelectorAll('.tabs button').forEach(function (other) { other.classList.remove('on'); });
+      document.querySelectorAll('.pane').forEach(function (pane) { pane.classList.remove('on'); });
+      tab.classList.add('on');
+      el('pane-' + tab.dataset.pane).classList.add('on');
+    });
+  });
+
+  ['settingsPop', 'colsPop'].forEach(function (id) {
+    var pop = el(id);
+    pop.querySelector('button').addEventListener('click', function (event) {
+      event.stopPropagation();
+      var open = pop.classList.contains('open');
+      document.querySelectorAll('.pop').forEach(function (other) { other.classList.remove('open'); });
+      if (!open) { pop.classList.add('open'); }
+    });
+    pop.querySelector('.sheet').addEventListener('click', function (event) { event.stopPropagation(); });
+  });
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.pop').forEach(function (pop) { pop.classList.remove('open'); });
+  });
+  document.addEventListener('keydown', function (event) {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); run(); }
+    if (event.key === 'Escape') {
+      document.querySelectorAll('.pop').forEach(function (pop) { pop.classList.remove('open'); });
+    }
+  });
+
+  /* ---------- boot ---------- */
+
+  settings = load('settings', settings);
+  saved = load('saved', []);
+  el('hideHudi').checked = settings.hideHudi;
+  el('server').value = load('server', el('server').value);
+  el('user').value = load('user', el('user').value);
+  el('sql').value = load('sql', '');
+  renderSaved();
+  loadCatalogs();
+})();
+</script>
+</body>
+</html>
