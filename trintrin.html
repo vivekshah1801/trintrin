@@ -234,6 +234,7 @@
   };
   var settings = { hideHudi: true };
   var saved = [];
+  var pendingView = null;   // a saved query's view, applied once its own SQL comes back
 
   /* ---------- persistence (localStorage may throw in private mode) ---------- */
 
@@ -442,6 +443,57 @@
 
   /* ---------- saved queries ---------- */
 
+  function currentView() {
+    if (!state.columns.length) { return null; }
+    var hidden = [];
+    state.hidden.forEach(function (index) { hidden.push(state.columns[index]); });
+    var filters = {};
+    state.columns.forEach(function (name, index) {
+      if (state.filters[index]) { filters[name] = state.filters[index]; }
+    });
+    return {
+      hidden: hidden,
+      filters: filters,
+      search: state.search,
+      sort: state.sort ? { column: state.columns[state.sort.column], direction: state.sort.direction } : null
+    };
+  }
+
+  function applyView(view) {
+    if (!view) { return; }
+    var indexOf = {};
+    state.columns.forEach(function (name, index) { indexOf[name] = index; });
+
+    state.hidden = new Set();
+    (view.hidden || []).forEach(function (name) {
+      if (indexOf[name] !== undefined) { state.hidden.add(indexOf[name]); }
+    });
+
+    state.filters = state.columns.map(function () { return ''; });
+    Object.keys(view.filters || {}).forEach(function (name) {
+      if (indexOf[name] !== undefined) { state.filters[indexOf[name]] = view.filters[name]; }
+    });
+
+    state.search = view.search || '';
+    el('search').value = state.search;
+
+    state.sort = view.sort && indexOf[view.sort.column] !== undefined
+      ? { column: indexOf[view.sort.column], direction: view.sort.direction }
+      : null;
+  }
+
+  function describeView(view) {
+    if (!view) { return 'no saved view'; }
+    var bits = [];
+    var plural = function (count, noun) { return count + ' ' + noun + (count === 1 ? '' : 's'); };
+    if (view.hidden && view.hidden.length) { bits.push(plural(view.hidden.length, 'hidden column')); }
+    var filterCount = view.filters ? Object.keys(view.filters).length : 0;
+    if (filterCount) { bits.push(plural(filterCount, 'column filter')); }
+    if (view.search) { bits.push('search "' + view.search + '"'); }
+    if (view.sort) { bits.push('sorted by ' + view.sort.column); }
+    return bits.length ? bits.join(', ') : 'no filters or hidden columns';
+  }
+
   function renderSaved() {
     var list = el('savedList');
     list.textContent = '';
@@ -459,10 +511,14 @@
       var name = document.createElement('span');
       name.className = 'nm';
       name.textContent = item.name;
-      name.title = item.sql;
+      name.title = item.sql + '\n\n' + describeView(item.view);
       name.addEventListener('click', function () {
         el('sql').value = item.sql;
         store('sql', item.sql);
+        pendingView = item.view ? { sql: item.sql.trim(), view: item.view } : null;
+        el('status').textContent = pendingView
+          ? 'Loaded "' + item.name + '" - run it to restore ' + describeView(item.view)
+          : 'Loaded "' + item.name + '"';
       });
       row.appendChild(name);
 
@@ -487,7 +543,8 @@
     if (!name) { return; }
     var existing = -1;
     for (var i = 0; i < saved.length; i++) { if (saved[i].name === name) { existing = i; } }
-    if (existing >= 0) { saved[existing].sql = sql; } else { saved.push({ name: name, sql: sql }); }
+    var entry = { name: name, sql: sql, view: currentView() };
+    if (existing >= 0) { saved[existing] = entry; } else { saved.push(entry); }
     store('saved', saved);
     renderSaved();
   });
@@ -815,6 +872,8 @@
       state.search = '';
       el('search').value = '';
       applyDefaultHiding();
+      if (pendingView && pendingView.sql === sql) { applyView(pendingView.view); }
+      pendingView = null;
       el('empty').hidden = true;
       el('table').hidden = false;
       redraw();

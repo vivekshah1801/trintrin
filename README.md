@@ -22,7 +22,8 @@ Set the host and user in the header, hit **Test connection**, then write SQL and
 
 - **Explore** — browse catalogs → schemas → tables → columns. Clicking a table drops a `SELECT` into the editor;
   the ▶ button runs it.
-- **Saved queries** — name and store queries in the browser; click one to load it.
+- **Saved queries** — name and store queries in the browser, along with the columns you had selected and any
+  filters, search and sort in effect. Click one to load it, then run it to get that view back.
 - **Results** — click a header to sort, filter per column, search across all visible columns, and pick which
   columns to show from the **Columns** menu.
 - **Download CSV** — exports the checked rows, or every row matching the current filters if nothing is checked.
