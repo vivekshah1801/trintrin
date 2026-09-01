@@ -102,12 +102,16 @@
   #status { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 
   .grid { flex: 1; overflow: auto; }
-  table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+  table { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
   th, td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
-           padding: 5px 9px; text-align: left; vertical-align: top; max-width: 460px;
+           padding: 5px 9px; text-align: left; vertical-align: top;
            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   thead th { position: sticky; top: 0; z-index: 2; background: var(--panel); cursor: pointer;
              user-select: none; font-weight: 620; white-space: nowrap; }
+  th .grip { position: absolute; top: 0; right: 0; width: 7px; height: 100%;
+             cursor: col-resize; z-index: 3; }
+  th .grip:hover, body.resizing th .grip { background: var(--accent); opacity: 0.5; }
+  body.resizing { cursor: col-resize; user-select: none; }
   thead tr.filters th { top: 30px; padding: 3px 4px; cursor: default; }
   thead tr.filters input { width: 100%; min-width: 88px; padding: 2px 5px; font-size: 12px; }
   th .arrow { color: var(--accent); margin-left: 4px; }
@@ -118,11 +122,9 @@
   .pick { width: 30px; text-align: center; padding: 4px; }
   .empty { padding: 22px 14px; color: var(--muted); }
 
-  footer { display: flex; align-items: center; gap: 14px; padding: 4px 13px;
+  footer { padding: 6px 13px; font-size: 11.5px; color: var(--muted);
            background: var(--panel); border-top: 1px solid var(--border); }
-  footer pre { margin: 0; font-family: var(--mono); font-size: 8.5px; line-height: 1.15;
-               color: var(--muted); white-space: pre; }
-  footer .tagline { color: var(--muted); font-size: 11.5px; }
+  footer a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -204,6 +206,7 @@
     <div class="grid">
       <div class="empty" id="empty">Run a query, or pick a table from the Explore panel.</div>
       <table id="table" hidden>
+        <colgroup id="colgroup"></colgroup>
         <thead><tr id="head"></tr><tr class="filters" id="filterRow"></tr></thead>
         <tbody id="body"></tbody>
       </table>
@@ -211,14 +214,7 @@
   </main>
 </div>
 
-<footer>
-  <pre>          ( (
-           ) )
- (•ᴗ•)   .____.
- /(  )___|    |]
-  / \    `----'</pre>
-  <span class="tagline">trintrin · sip while it scans</span>
-</footer>
+<footer>Made by AI, while <a href="https://github.com/vivekshah1801" target="_blank" rel="noopener noreferrer">Vivek</a> sips tea.</footer>
 
 <script>
 (function () {
@@ -226,10 +222,14 @@
 
   var RENDER_CAP = 3000;
   var HUDI = /^_hoodie_/;
+  var PICK_WIDTH = 30;
+  var MIN_COL = 56, MAX_COL = 460, WIDTH_SAMPLE = 300;
+  var CELL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  var HEAD_FONT = '620 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   var el = function (id) { return document.getElementById(id); };
 
   var state = {
-    columns: [], rows: [], filters: [], hidden: new Set(),
+    columns: [], rows: [], filters: [], hidden: new Set(), widths: {},
     search: '', sort: null, selected: new Set(), view: []
   };
   var settings = { hideHudi: true };
@@ -554,7 +554,95 @@
     state.view = view;
   }
 
+  /* ---------- column widths (Excel-style drag to resize) ---------- */
+
+  var measurer = document.createElement('canvas').getContext('2d');
+
+  function textWidth(value, font) {
+    measurer.font = font;
+    return measurer.measureText(value).width;
+  }
+
+  function autoWidth(index) {
+    var width = textWidth(state.columns[index], HEAD_FONT) + 34;   // padding, borders, sort arrow
+    var limit = Math.min(state.rows.length, WIDTH_SAMPLE);
+    for (var i = 0; i < limit; i++) {
+      var value = state.rows[i][index];
+      var cell = value === null || value === undefined ? 'NULL' : String(value);
+      if (cell.length > 400) { cell = cell.slice(0, 400); }
+      width = Math.max(width, textWidth(cell, CELL_FONT) + 22);
+    }
+    return Math.round(Math.max(MIN_COL, Math.min(MAX_COL, width)));
+  }
+
+  function widthOf(index) {
+    if (state.widths[index] === undefined) { state.widths[index] = autoWidth(index); }
+    return state.widths[index];
+  }
+
+  function sizeTable() {
+    var total = PICK_WIDTH;
+    visibleColumns().forEach(function (index) { total += widthOf(index); });
+    el('table').style.width = total + 'px';
+  }
+
+  function renderColgroup() {
+    var group = el('colgroup');
+    group.textContent = '';
+    var pick = document.createElement('col');
+    pick.style.width = PICK_WIDTH + 'px';
+    group.appendChild(pick);
+
+    var cols = {};
+    visibleColumns().forEach(function (index) {
+      var col = document.createElement('col');
+      col.style.width = widthOf(index) + 'px';
+      group.appendChild(col);
+      cols[index] = col;
+    });
+    sizeTable();
+    return cols;
+  }
+
+  function attachGrip(th, index, col) {
+    var grip = document.createElement('span');
+    grip.className = 'grip';
+    grip.title = 'Drag to resize · double-click to fit contents';
+    grip.addEventListener('click', function (event) { event.stopPropagation(); });
+
+    grip.addEventListener('dblclick', function (event) {
+      event.stopPropagation();
+      state.widths[index] = autoWidth(index);
+      col.style.width = state.widths[index] + 'px';
+      sizeTable();
+    });
+
+    grip.addEventListener('mousedown', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      var startX = event.clientX, startWidth = widthOf(index);
+      document.body.classList.add('resizing');
+
+      var move = function (moved) {
+        var next = Math.max(MIN_COL, Math.round(startWidth + (moved.clientX - startX)));
+        state.widths[index] = next;
+        col.style.width = next + 'px';
+        sizeTable();
+      };
+      var stop = function () {
+        document.body.classList.remove('resizing');
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', stop);
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', stop);
+    });
+
+    th.appendChild(grip);
+  }
+
   function renderHead() {
+    var cols = renderColgroup();
     var head = el('head'), filterRow = el('filterRow');
     head.textContent = '';
     filterRow.textContent = '';
@@ -591,6 +679,7 @@
         else { state.sort = null; }
         redraw();
       });
+      attachGrip(th, index, cols[index]);
       head.appendChild(th);
 
       var cell = document.createElement('th');
@@ -720,6 +809,7 @@
       state.columns = result.columns || [];
       state.rows = result.rows || [];
       state.filters = state.columns.map(function () { return ''; });
+      state.widths = {};
       state.selected = new Set();
       state.sort = null;
       state.search = '';
