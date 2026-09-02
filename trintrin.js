@@ -48,17 +48,17 @@ function autoWidth(index) {
   });
 }
 
-function ask(server, user, path, payload) {
+async function ask(server, user, path, payload) {
   payload.server = server;
   payload.user = user;
-  return fetch(path, {
+  var response = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  }).then(function (response) { return response.json(); }).then(function (result) {
-    if (result.error) { throw new Error(result.error); }
-    return result;
   });
+  var result = await response.json();
+  if (result.error) { throw new Error(result.error); }
+  return result;
 }
 
 function query(sql) {
@@ -236,11 +236,10 @@ function tableNode(catalog, schema, table) {
     icon: 'table',
     onSelect: function () { el('sql').value = select; store('sql', select); },
     onRun: function () { el('sql').value = select; store('sql', select); run(); },
-    expand: function (children) {
-      return query('DESCRIBE ' + fqn).then(function (result) {
-        fill(children, result.rows, function (row) {
-          return makeNode(row[0], row[1], { leaf: true, icon: 'column', kind: 'column' });
-        });
+    expand: async function (children) {
+      var result = await query('DESCRIBE ' + fqn);
+      fill(children, result.rows, function (row) {
+        return makeNode(row[0], row[1], { leaf: true, icon: 'column', kind: 'column' });
       });
     }
   });
@@ -252,10 +251,9 @@ function schemaNode(catalog, schema) {
     catalog: catalog,
     schema: schema,
     icon: 'schema',
-    expand: function (children) {
-      return query('SHOW TABLES FROM ' + quote(catalog) + '.' + quote(schema)).then(function (result) {
-        fill(children, result.rows, function (row) { return tableNode(catalog, schema, row[0]); });
-      });
+    expand: async function (children) {
+      var result = await query('SHOW TABLES FROM ' + quote(catalog) + '.' + quote(schema));
+      fill(children, result.rows, function (row) { return tableNode(catalog, schema, row[0]); });
     }
   });
 }
@@ -265,10 +263,9 @@ function catalogNode(catalog) {
     kind: 'catalog',
     catalog: catalog,
     icon: 'catalog',
-    expand: function (children) {
-      return query('SHOW SCHEMAS FROM ' + quote(catalog)).then(function (result) {
-        fill(children, result.rows, function (row) { return schemaNode(catalog, row[0]); });
-      });
+    expand: async function (children) {
+      var result = await query('SHOW SCHEMAS FROM ' + quote(catalog));
+      fill(children, result.rows, function (row) { return schemaNode(catalog, row[0]); });
     }
   });
 }
@@ -393,11 +390,11 @@ function describeView(view) {
   return bits.length ? bits.join(', ') : 'no filters or hidden columns';
 }
 
-function loadSaved() {
-  return fetch('/api/saved').then(function (res) {
+async function loadSaved() {
+  try {
+    var res = await fetch('/api/saved');
     if (!res.ok) { throw new Error('HTTP ' + res.status); }
-    return res.json();
-  }).then(function (data) {
+    var data = await res.json();
     var list = Array.isArray(data.saved) ? data.saved : [];
     if (!list.length) {
       var legacy = load('saved', []);
@@ -410,10 +407,10 @@ function loadSaved() {
     }
     saved = list;
     renderSaved();
-  }).catch(function () {
+  } catch (error) {
     saved = load('saved', []);
     renderSaved();
-  });
+  }
 }
 
 function saveSaved(list) {
