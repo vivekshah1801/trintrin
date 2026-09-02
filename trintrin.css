@@ -13,7 +13,7 @@
   --bad: #b42318;
   --error-bg: #fdecec;
   --error-fg: #9a2020;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --mono: ui-monospace, monospace;
   color-scheme: light;
 }
 
