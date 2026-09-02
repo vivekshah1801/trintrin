@@ -30,7 +30,8 @@ export function isEditableElement(target) {
  */
 export function isMac() {
   if (typeof navigator === 'undefined') return false;
-  return /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform || navigator.userAgent || '');
+  var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.userAgent || '';
+  return /(Mac|iPhone|iPod|iPad|iOS)/i.test(platform);
 }
 
 /**
