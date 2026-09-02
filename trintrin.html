@@ -59,6 +59,11 @@
   aside { width: 268px; flex: none; display: flex; flex-direction: column;
           background: var(--panel); border-right: 1px solid var(--border); }
   aside.hidden { display: none; }
+  .resizer { width: 6px; margin-left: -3px; margin-right: -3px; cursor: col-resize; z-index: 10;
+             flex: none; position: relative; background: transparent; transition: background 0.1s; }
+  .resizer:hover, body.resizing-side .resizer { background: var(--accent); opacity: 0.6; }
+  body.resizing-side { cursor: col-resize; user-select: none; }
+  aside.hidden + .resizer { display: none; }
   .tabs { display: flex; border-bottom: 1px solid var(--border); }
   .tabs button { flex: 1; border: 0; border-radius: 0; background: var(--sunken); color: var(--muted);
                  padding: 7px 0; font-weight: 600; font-size: 12px; }
@@ -172,6 +177,7 @@
       <div id="savedList"></div>
     </div>
   </aside>
+  <div class="resizer" id="sideResizer" title="Drag to resize · double-click to reset"></div>
 
   <main>
     <div class="editor">
@@ -945,6 +951,52 @@
     }
   });
 
+  /* ---------- sidebar resizer ---------- */
+
+  var DEFAULT_SIDE_WIDTH = 268;
+  var MIN_SIDE_WIDTH = 160;
+
+  function initSidebarResizer() {
+    var side = el('side');
+    var resizer = el('sideResizer');
+    if (!side || !resizer) { return; }
+
+    var sideWidth = load('sideWidth', null);
+    if (sideWidth && typeof sideWidth === 'number') {
+      side.style.width = Math.max(MIN_SIDE_WIDTH, sideWidth) + 'px';
+    }
+
+    resizer.addEventListener('dblclick', function (event) {
+      event.preventDefault();
+      side.style.width = DEFAULT_SIDE_WIDTH + 'px';
+      store('sideWidth', DEFAULT_SIDE_WIDTH);
+    });
+
+    resizer.addEventListener('mousedown', function (event) {
+      event.preventDefault();
+      var startX = event.clientX;
+      var startWidth = side.getBoundingClientRect().width;
+      var currentWidth = startWidth;
+      document.body.classList.add('resizing-side');
+
+      var move = function (moved) {
+        var maxSideWidth = Math.max(MIN_SIDE_WIDTH, window.innerWidth - 200);
+        currentWidth = Math.max(MIN_SIDE_WIDTH, Math.min(maxSideWidth, Math.round(startWidth + (moved.clientX - startX))));
+        side.style.width = currentWidth + 'px';
+      };
+
+      var stop = function () {
+        document.body.classList.remove('resizing-side');
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', stop);
+        store('sideWidth', currentWidth);
+      };
+
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', stop);
+    });
+  }
+
   /* ---------- boot ---------- */
 
   settings = load('settings', settings);
@@ -953,6 +1005,7 @@
   el('server').value = load('server', el('server').value);
   el('user').value = load('user', el('user').value);
   el('sql').value = load('sql', '');
+  initSidebarResizer();
   renderSaved();
   loadCatalogs();
 })();
