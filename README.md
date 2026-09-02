@@ -22,7 +22,7 @@ Set the host and user in the header, hit **Test connection**, then write SQL and
 
 - **Explore** — browse catalogs → schemas → tables → columns. Clicking a table drops a `SELECT` into the editor;
   the ▶ button runs it.
-- **Saved queries** — name and store queries in the browser, along with the columns you had selected and any
+- **Saved queries** — name and store queries directly on your machine (e.g. `~/.local/share/trintrin/saved_queries.json` on Linux, `~/Library/Application Support/trintrin/` on macOS, `%APPDATA%\trintrin\` on Windows), along with the columns you had selected and any
   filters, search and sort in effect. Click one to load it, then run it to get that view back.
 - **Results** — click a header to sort, filter per column, search across all visible columns, and pick which
   columns to show from the **Columns** menu.
@@ -31,7 +31,7 @@ Set the host and user in the header, hit **Test connection**, then write SQL and
 - **Settings & Theme** — choose between Auto (matches system theme, default), Light, or Dark from Settings. Apache Hudi metadata columns (`_hoodie_*`) are hidden by default, since they are noise in most
   queries. Turn that off if you want them.
 
-Host, user, last query, saved queries and settings live in `localStorage`, so they survive a reload.
+Saved queries are stored on disk according to OS conventions (`~/.local/share/trintrin/` on Linux, `~/Library/Application Support/trintrin/` on macOS, `%APPDATA%\trintrin\` on Windows, or `$XDG_DATA_HOME/trintrin/`). Host, user, last query, sidebar width and settings live in `localStorage`, so they survive a reload.
 
 ## CLI
 

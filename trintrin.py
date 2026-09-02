@@ -34,7 +34,80 @@ DEFAULT_PORT = 8375
 POLL_INTERVAL_SECONDS = 0.1
 REQUEST_TIMEOUT_SECONDS = 30
 MAX_BODY_BYTES = 1 << 20
-UI_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'trintrin.html')
+STATIC_DIR = os.path.dirname(os.path.abspath(__file__))
+UI_FILE = os.path.join(STATIC_DIR, 'trintrin.html')
+MIME_TYPES = {
+    '.html': 'text/html; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'application/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon',
+}
+
+
+def get_data_dir():
+    """Returns the OS-appropriate user data directory for trintrin."""
+    # 1. Custom / standard XDG override
+    xdg_data = os.environ.get('XDG_DATA_HOME')
+    if xdg_data:
+        return os.path.join(xdg_data, 'trintrin')
+
+    # 2. Windows: %APPDATA%\trintrin or %LOCALAPPDATA%\trintrin
+    if sys.platform == 'win32':
+        appdata = os.environ.get('APPDATA') or os.environ.get('LOCALAPPDATA')
+        if appdata:
+            return os.path.join(appdata, 'trintrin')
+        return os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming', 'trintrin')
+
+    # 3. macOS: ~/Library/Application Support/trintrin (or ~/.local/share/trintrin if already created)
+    if sys.platform == 'darwin':
+        local_share = os.path.join(os.path.expanduser('~/.local/share'), 'trintrin')
+        if os.path.exists(local_share):
+            return local_share
+        return os.path.join(os.path.expanduser('~/Library/Application Support'), 'trintrin')
+
+    # 4. Linux and other Unix: ~/.local/share/trintrin
+    return os.path.join(os.path.expanduser('~/.local/share'), 'trintrin')
+
+
+SAVED_QUERIES_FILE = os.path.join(get_data_dir(), 'saved_queries.json')
+
+
+def get_candidate_query_files():
+    """Returns all candidate paths where saved queries could reside across OS conventions."""
+    paths = [SAVED_QUERIES_FILE]
+    for alt in (
+        os.path.join(os.path.expanduser('~/.local/share'), 'trintrin', 'saved_queries.json'),
+        os.path.join(os.path.expanduser('~/Library/Application Support'), 'trintrin', 'saved_queries.json'),
+    ):
+        if alt not in paths:
+            paths.append(alt)
+    return paths
+
+
+def load_saved_queries():
+    for path in get_candidate_query_files():
+        if os.path.isfile(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as handle:
+                    data = json.load(handle)
+                    if isinstance(data, list):
+                        return data
+            except Exception as error:
+                sys.stderr.write("Failed to read saved queries from {}: {}\n".format(path, error))
+    return []
+
+
+def store_saved_queries(queries):
+    path = SAVED_QUERIES_FILE
+    parent = os.path.dirname(path)
+    os.makedirs(parent, exist_ok=True)
+    tmp_path = path + '.tmp'
+    with open(tmp_path, 'w', encoding='utf-8') as handle:
+        json.dump(queries, handle, indent=2, ensure_ascii=False)
+        handle.write('\n')
+    os.replace(tmp_path, path)
 
 
 class TrinoClient:
@@ -103,17 +176,32 @@ class TrintrinHandler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length) or b'{}')
 
     def do_GET(self):
-        if self.path.split('?')[0] not in ('/', '/index.html'):
-            self._respond_json(404, {'error': 'not found'})
+        clean_path = self.path.split('?')[0]
+        if clean_path == '/api/saved':
+            self._respond_json(200, {'saved': load_saved_queries()})
             return
-        try:
-            with open(UI_FILE, 'rb') as handle:
-                self._respond(200, handle.read(), 'text/html; charset=utf-8')
-        except IOError as error:
-            self._respond_json(500, {'error': 'cannot read {}: {}'.format(UI_FILE, error)})
+
+        if clean_path in ('/', '/index.html'):
+            target_file = UI_FILE
+        else:
+            filename = os.path.basename(clean_path.lstrip('/'))
+            target_file = os.path.join(STATIC_DIR, filename)
+
+        if os.path.isfile(target_file):
+            ext = os.path.splitext(target_file)[1].lower()
+            content_type = MIME_TYPES.get(ext, 'application/octet-stream')
+            try:
+                with open(target_file, 'rb') as handle:
+                    self._respond(200, handle.read(), content_type)
+                return
+            except IOError as error:
+                self._respond_json(500, {'error': 'cannot read {}: {}'.format(target_file, error)})
+                return
+
+        self._respond_json(404, {'error': 'not found'})
 
     def do_POST(self):
-        if self.path not in ('/api/query', '/api/ping'):
+        if self.path not in ('/api/query', '/api/ping', '/api/saved'):
             self._respond_json(404, {'error': 'not found'})
             return
 
@@ -121,6 +209,18 @@ class TrintrinHandler(BaseHTTPRequestHandler):
             request = self._read_request()
         except ValueError as error:
             self._respond_json(400, {'error': 'bad request: {}'.format(error)})
+            return
+
+        if self.path == '/api/saved':
+            saved = request.get('saved')
+            if not isinstance(saved, list):
+                self._respond_json(400, {'error': 'expected "saved" to be a list'})
+                return
+            try:
+                store_saved_queries(saved)
+                self._respond_json(200, {'saved': saved})
+            except Exception as error:
+                self._respond_json(500, {'error': 'cannot save queries: {}'.format(error)})
             return
 
         client = TrinoClient(request.get('server'), request.get('user'))
