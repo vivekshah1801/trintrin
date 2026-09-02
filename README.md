@@ -1,6 +1,6 @@
 # trintrin
 
-A small Trino console: one Python file, one HTML file, no dependencies.
+A lightweight, modular Trino console: CLI queries, CSV dumps, and a local browser UI with no external dependencies.
 
 Trino builds each `nextUri` from the coordinator's own hostname. If you reach Trino through a port-forward, an
 SSH tunnel or a bastion, that hostname does not resolve on your machine and the stock `trino` CLI simply hangs.
@@ -20,8 +20,7 @@ There is nothing to install — `requirements.txt` is empty on purpose.
 
 Set the host and user in the header, hit **Test connection**, then write SQL and press ⌘/Ctrl+Enter.
 
-- **Explore** — browse catalogs → schemas → tables → columns. Clicking a table drops a `SELECT` into the editor;
-  the ▶ button runs it.
+- **Explore** — browse catalogs → schemas → tables → columns. Use the **Snipe** button (⌖ or `⌘/Ctrl+Shift+L`) to automatically locate, expand, scroll to, and highlight the active SQL query's table in the tree (just like IntelliJ's Select Opened File). Clicking a table drops a `SELECT` into the editor; the ▶ button runs it.
 - **Saved queries** — name, save, reorder (drag and drop), batch delete (multi-select), export, and import queries directly on your machine (e.g. `~/.local/share/trintrin/saved_queries.json` on Linux, `~/Library/Application Support/trintrin/` on macOS, `%APPDATA%\trintrin\` on Windows), along with the columns you had selected and any
   filters, search and sort in effect. Use **Export** / **Import** to backup or share queries across machines.
 - **Results** — click a header to sort, filter per column, search across all visible columns, and pick which

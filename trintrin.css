@@ -746,6 +746,26 @@ footer a {
   color: var(--accent);
 }
 
+/* ---------- tree snipe highlight ---------- */
+.node.sniped {
+  background: var(--row-sel);
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  animation: snipe-pulse 2s ease-out;
+}
+
+@keyframes snipe-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(31, 111, 235, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(31, 111, 235, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(31, 111, 235, 0);
+  }
+}
+
 /* ---------- notifier toasts ---------- */
 .notifier-container {
   position: fixed;

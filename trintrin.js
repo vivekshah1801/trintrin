@@ -1,7 +1,7 @@
 import { Notifier } from './webutils/notifier.js';
 import { createIcon } from './webutils/icons.js';
 import { load, store } from './webutils/storage.js';
-import { text, quote } from './webutils/sql.js';
+import { text, quote, extractTableReference } from './webutils/sql.js';
 import { autoWidth as calcAutoWidth } from './webutils/measure.js';
 import { downloadCsv } from './webutils/csv.js';
 
@@ -299,6 +299,215 @@ function ensureCatalogsLoaded() {
     return catalogsPromise;
   }
   return loadCatalogs();
+}
+
+/* ---------- explore tree snipe ---------- */
+
+function findChildLi(container, name) {
+  if (!container) return null;
+  var lower = String(name).toLowerCase();
+  var children = container.querySelectorAll(':scope > li');
+  for (var i = 0; i < children.length; i++) {
+    var item = children[i];
+    var itemName = item.dataset.name || (item.querySelector('.nm') && item.querySelector('.nm').textContent);
+    if (itemName && itemName.toLowerCase() === lower) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function locateSchemaAndTable(catalogLi, target) {
+  return catalogLi.expandNode().then(function (schemasUl) {
+    if (!target.schema) {
+      return searchSchemasInCatalog(catalogLi, target.table);
+    }
+
+    var schemaLi = findChildLi(schemasUl, target.schema);
+    if (!schemaLi) {
+      var catName = catalogLi.dataset.name || target.catalog;
+      var err = new Error('Schema "' + target.schema + '" does not exist in catalog "' + catName + '".');
+      throw err;
+    }
+
+    return schemaLi.expandNode().then(function (tablesUl) {
+      var tableLi = findChildLi(tablesUl, target.table);
+      if (!tableLi) {
+        var catName = catalogLi.dataset.name || target.catalog;
+        var schName = schemaLi.dataset.name || target.schema;
+        var err = new Error('Table "' + target.table + '" does not exist in schema "' + catName + '.' + schName + '".');
+        throw err;
+      }
+      return tableLi;
+    });
+  });
+}
+
+function searchCatalogsForTarget(catalogNodes, target) {
+  var index = 0;
+
+  function nextCatalog() {
+    if (index >= catalogNodes.length) {
+      var err = new Error('Table "' + (target.schema ? target.schema + '.' : '') + target.table + '" was not found in any catalog.');
+      throw err;
+    }
+    var catalogLi = catalogNodes[index++];
+    return catalogLi.expandNode().then(function (schemasUl) {
+      if (target.schema) {
+        var schemaLi = findChildLi(schemasUl, target.schema);
+        if (schemaLi) {
+          return schemaLi.expandNode().then(function (tablesUl) {
+            var tableLi = findChildLi(tablesUl, target.table);
+            if (tableLi) {
+              return tableLi;
+            }
+            return nextCatalog();
+          });
+        } else {
+          return nextCatalog();
+        }
+      } else {
+        return searchSchemasInCatalog(catalogLi, target.table).then(function (tableLi) {
+          if (tableLi) return tableLi;
+          return nextCatalog();
+        }).catch(function () {
+          return nextCatalog();
+        });
+      }
+    }).catch(function () {
+      return nextCatalog();
+    });
+  }
+
+  return nextCatalog();
+}
+
+function searchSchemasInCatalog(catalogLi, tableName) {
+  return catalogLi.expandNode().then(function (schemasUl) {
+    var schemaNodes = Array.prototype.slice.call(schemasUl.querySelectorAll(':scope > li'));
+    var sIdx = 0;
+
+    function nextSchema() {
+      if (sIdx >= schemaNodes.length) {
+        return Promise.resolve(null);
+      }
+      var schemaLi = schemaNodes[sIdx++];
+      return schemaLi.expandNode().then(function (tablesUl) {
+        var tableLi = findChildLi(tablesUl, tableName);
+        if (tableLi) return tableLi;
+        return nextSchema();
+      }).catch(function () {
+        return nextSchema();
+      });
+    }
+
+    return nextSchema();
+  });
+}
+
+function snipeTableTarget(target) {
+  var snipeBtn = el('snipeTable');
+  if (snipeBtn) snipeBtn.disabled = true;
+
+  // 1. Switch to Explore pane
+  var exploreTab = document.querySelector('.tabs button[data-pane="explore"]');
+  if (exploreTab && !exploreTab.classList.contains('on')) {
+    exploreTab.click();
+  }
+
+  // 2. Open sidebar if hidden
+  var side = el('side');
+  if (side && side.classList.contains('hidden')) {
+    side.classList.remove('hidden');
+  }
+
+  // 3. Clear filter input so nothing is hidden
+  var filterInput = el('treeFilter');
+  if (filterInput && filterInput.value.trim()) {
+    filterInput.value = '';
+    filterInput.dispatchEvent(new Event('input'));
+  }
+
+  var tree = el('tree');
+
+  return ensureCatalogsLoaded().then(function () {
+    var catalogNodes = Array.prototype.slice.call(tree.querySelectorAll(':scope > li'));
+    if (!catalogNodes.length) {
+      throw new Error('No catalogs available to explore.');
+    }
+
+    if (target.catalog) {
+      var catalogLi = findChildLi(tree, target.catalog);
+      if (!catalogLi) {
+        var err = new Error('Catalog "' + target.catalog + '" does not exist.');
+        throw err;
+      }
+      return locateSchemaAndTable(catalogLi, target);
+    } else {
+      return searchCatalogsForTarget(catalogNodes, target);
+    }
+  }).then(function (tableLi) {
+    if (!tableLi) return;
+
+    return tableLi.expandNode().then(function () {
+      var nodeEl = tableLi.querySelector('.node');
+      if (nodeEl) {
+        document.querySelectorAll('.node.sniped').forEach(function (n) {
+          n.classList.remove('sniped');
+        });
+
+        nodeEl.classList.add('sniped');
+        nodeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        setTimeout(function () {
+          nodeEl.classList.remove('sniped');
+        }, 3500);
+      }
+
+      var fullPath = [
+        tableLi.dataset.catalog || target.catalog,
+        tableLi.dataset.schema || target.schema,
+        tableLi.dataset.table || target.table
+      ].filter(Boolean).join('.');
+
+      if (Notifier) {
+        Notifier.snipe('Located table in Explore tree', fullPath);
+      }
+    });
+  }).catch(function (error) {
+    var msg = error.message || String(error);
+    if (Notifier) {
+      Notifier.error(msg, 'Snipe Failed');
+    } else {
+      showError(msg);
+    }
+  }).finally(function () {
+    if (snipeBtn) snipeBtn.disabled = false;
+  });
+}
+
+function snipeCurrent() {
+  var sql = el('sql').value.trim();
+  if (!sql) {
+    if (Notifier) {
+      Notifier.warn('Please enter or select a SQL query first.', 'Snipe Table');
+    } else {
+      showError('No SQL query provided to snipe.');
+    }
+    return;
+  }
+
+  var target = extractTableReference(sql);
+  if (!target || !target.table) {
+    if (Notifier) {
+      Notifier.warn('Could not detect a valid table name in current query.', 'Snipe Table');
+    } else {
+      showError('Could not detect a valid table name in current query.');
+    }
+    return;
+  }
+
+  snipeTableTarget(target);
 }
 
 /* client-side filtering over what is currently rendered in the tree */
@@ -1026,8 +1235,16 @@ document.addEventListener('click', function () {
   document.querySelectorAll('.pop').forEach(function (pop) { pop.classList.remove('open'); });
 });
 
+if (el('snipeTable')) {
+  el('snipeTable').addEventListener('click', snipeCurrent);
+}
+
 document.addEventListener('keydown', function (event) {
   if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); run(); }
+  if ((event.metaKey || event.ctrlKey) && event.shiftKey && (event.key === 'L' || event.key === 'l')) {
+    event.preventDefault();
+    snipeCurrent();
+  }
   if (event.key === 'Escape') {
     document.querySelectorAll('.pop').forEach(function (pop) { pop.classList.remove('open'); });
   }
