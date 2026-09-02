@@ -29,6 +29,7 @@ Set the host and user in the header, hit **Test connection**, then write SQL and
   Only visible columns are exported.
 - **Settings & Theme** — choose between Auto (matches system theme, default), Light, or Dark from Settings. Apache Hudi metadata columns (`_hoodie_*`) are hidden by default, since they are noise in most
   queries. Turn that off if you want them.
+- **Keyboard Shortcuts** — press `?` (or click **Shortcuts** in the header) to open the hotkeys cheat sheet. Pressing `Esc` while inside any input or text box blurs it to immediately return to hotkey navigation mode, and `Esc` closes any active modal or menu.
 
 Saved queries are stored on disk according to OS conventions (`~/.local/share/trintrin/` on Linux, `~/Library/Application Support/trintrin/` on macOS, `%APPDATA%\trintrin\` on Windows, or `$XDG_DATA_HOME/trintrin/`). Host, user, last query, sidebar width and settings live in `localStorage`, so they survive a reload.
 
