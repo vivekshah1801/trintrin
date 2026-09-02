@@ -10,7 +10,7 @@ def write_csv(columns, rows, path):
         writer.writerow(columns)
         for row in rows:
             writer.writerow(['' if value is None else value for value in row])
-    print("Wrote {} rows x {} columns to {}".format(len(rows), len(columns), path))
+    print(f"Wrote {len(rows)} rows x {len(columns)} columns to {path}")
 
 
 def print_table(columns, rows):
@@ -18,4 +18,4 @@ def print_table(columns, rows):
     print('\t'.join('-' * len(column) for column in columns))
     for row in rows:
         print('\t'.join('NULL' if value is None else str(value) for value in row))
-    print("({} rows)".format(len(rows)), file=sys.stderr)
+    print(f"({len(rows)} rows)", file=sys.stderr)

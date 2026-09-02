@@ -5,11 +5,16 @@ import time
 import urllib.parse
 import urllib.request
 
-from .config import DEFAULT_SERVER, DEFAULT_USER, POLL_INTERVAL_SECONDS, REQUEST_TIMEOUT_SECONDS
+from .config import (
+    DEFAULT_SERVER,
+    DEFAULT_USER,
+    POLL_INTERVAL_SECONDS,
+    REQUEST_TIMEOUT_SECONDS,
+)
 
 
 def describe(error):
-    return '{}: {}'.format(type(error).__name__, error)
+    return f'{type(error).__name__}: {error}'
 
 
 class TrinoClient:
@@ -29,12 +34,12 @@ class TrinoClient:
 
     def info(self):
         """Returns the coordinator's /v1/info payload, used by the UI's connection test."""
-        return self._get_json('{}/v1/info'.format(self.server))
+        return self._get_json(f'{self.server}/v1/info')
 
     def run(self, sql):
         """Runs `sql` to completion and returns (columns, rows)."""
         request = urllib.request.Request(
-            '{}/v1/statement'.format(self.server),
+            f'{self.server}/v1/statement',
             data=sql.encode('utf-8'),
             headers={'X-Trino-User': self.user, 'Content-Type': 'text/plain'},
         )

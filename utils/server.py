@@ -16,7 +16,7 @@ class TrintrinHandler(BaseHTTPRequestHandler):
     """Serves the single-page UI and proxies its queries, so the browser only ever talks to this origin."""
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("{} {}\n".format(self.address_string(), fmt % args))
+        sys.stderr.write(f"{self.address_string()} {fmt % args}\n")
 
     def _respond(self, status, body, content_type):
         self.send_response(status)
@@ -56,8 +56,8 @@ class TrintrinHandler(BaseHTTPRequestHandler):
                 with open(target_file, 'rb') as handle:
                     self._respond(200, handle.read(), content_type)
                 return
-            except IOError as error:
-                self._respond_json(500, {'error': 'cannot read {}: {}'.format(target_file, error)})
+            except OSError as error:
+                self._respond_json(500, {'error': f'cannot read {target_file}: {error}'})
                 return
 
         self._respond_json(404, {'error': 'not found'})
@@ -70,7 +70,7 @@ class TrintrinHandler(BaseHTTPRequestHandler):
         try:
             request = self._read_request()
         except ValueError as error:
-            self._respond_json(400, {'error': 'bad request: {}'.format(error)})
+            self._respond_json(400, {'error': f'bad request: {error}'})
             return
 
         if self.path == '/api/saved':
@@ -82,7 +82,7 @@ class TrintrinHandler(BaseHTTPRequestHandler):
                 store_saved_queries(saved)
                 self._respond_json(200, {'saved': saved})
             except Exception as error:
-                self._respond_json(500, {'error': 'cannot save queries: {}'.format(error)})
+                self._respond_json(500, {'error': f'cannot save queries: {error}'})
             return
 
         client = TrinoClient(request.get('server'), request.get('user'))
@@ -117,8 +117,8 @@ class TrintrinHandler(BaseHTTPRequestHandler):
 
 
 def serve(port, open_browser, server_url=DEFAULT_SERVER):
-    url = 'http://localhost:{}'.format(port)
-    print("trintrin serving {} (default Trino target {})".format(url, server_url))
+    url = f'http://localhost:{port}'
+    print(f"trintrin serving {url} (default Trino target {server_url})")
     if open_browser:
         webbrowser.open(url)
     try:

@@ -54,7 +54,7 @@ def load_saved_queries():
                     if isinstance(data, list):
                         return data
             except Exception as error:
-                sys.stderr.write("Failed to read saved queries from {}: {}\n".format(path, error))
+                sys.stderr.write(f"Failed to read saved queries from {path}: {error}\n")
     return []
 
 
