@@ -22,8 +22,8 @@ Set the host and user in the header, hit **Test connection**, then write SQL and
 
 - **Explore** — browse catalogs → schemas → tables → columns. Clicking a table drops a `SELECT` into the editor;
   the ▶ button runs it.
-- **Saved queries** — name and store queries directly on your machine (e.g. `~/.local/share/trintrin/saved_queries.json` on Linux, `~/Library/Application Support/trintrin/` on macOS, `%APPDATA%\trintrin\` on Windows), along with the columns you had selected and any
-  filters, search and sort in effect. Click one to load it, then run it to get that view back.
+- **Saved queries** — name, save, reorder (drag and drop), batch delete (multi-select), export, and import queries directly on your machine (e.g. `~/.local/share/trintrin/saved_queries.json` on Linux, `~/Library/Application Support/trintrin/` on macOS, `%APPDATA%\trintrin\` on Windows), along with the columns you had selected and any
+  filters, search and sort in effect. Use **Export** / **Import** to backup or share queries across machines.
 - **Results** — click a header to sort, filter per column, search across all visible columns, and pick which
   columns to show from the **Columns** menu.
 - **Download CSV** — exports the checked rows, or every row matching the current filters if nothing is checked.

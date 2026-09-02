@@ -15,6 +15,8 @@
   };
   var settings = { hideHudi: true, theme: 'auto' };
   var saved = [];
+  var selectedSaved = new Set();
+  var draggedSavedIndex = null;
   var pendingView = null;   // a saved query's view, applied once its own SQL comes back
 
   var SVGS = {
@@ -26,6 +28,7 @@
     chevronDown: '<svg class="icon" viewBox="0 0 24 24" width="10" height="10" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
     trash: '<svg class="icon" viewBox="0 0 24 24" width="12" height="12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
     download: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    upload: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
     columns: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></svg>',
     clear: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
     sortAsc: '<svg class="icon" viewBox="0 0 24 24" width="10" height="10" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
@@ -34,7 +37,8 @@
     schema: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
     table: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="3" x2="12" y2="21"/></svg>',
     column: '<svg class="icon" viewBox="0 0 24 24" width="12" height="12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
-    bookmark: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>'
+    bookmark: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+    grip: '<svg class="icon" viewBox="0 0 24 24" width="11" height="11" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>'
   };
 
   function createIcon(name) {
@@ -369,9 +373,25 @@
     });
   }
 
+  function updateSavedSelectionUI() {
+    var total = saved.length;
+    var count = selectedSaved.size;
+    var toolbar = el('savedToolbar');
+    if (total > 0) {
+      toolbar.hidden = false;
+      el('savedSelectedCount').textContent = count;
+      var delBtn = el('deleteSelectedSaved');
+      delBtn.disabled = count === 0;
+      delBtn.style.opacity = count === 0 ? '0.45' : '1';
+    } else {
+      toolbar.hidden = true;
+    }
+  }
+
   function renderSaved() {
     var list = el('savedList');
     list.textContent = '';
+    updateSavedSelectionUI();
 
     if (!saved.length) {
       var note = document.createElement('div');
@@ -383,13 +403,43 @@
 
     saved.forEach(function (item, index) {
       var row = document.createElement('div');
-      row.className = 'saved-item';
+      row.className = 'saved-item' + (selectedSaved.has(index) ? ' selected' : '');
+      row.draggable = true;
+      row.dataset.index = index;
 
+      // Drag Handle / Grip
+      var grip = document.createElement('span');
+      grip.className = 'grip';
+      grip.title = 'Drag to reorder';
+      grip.appendChild(createIcon('grip'));
+      row.appendChild(grip);
+
+      // Multi-select checkbox
+      var chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'saved-check';
+      chk.title = 'Select query';
+      chk.checked = selectedSaved.has(index);
+      chk.addEventListener('change', function (event) {
+        event.stopPropagation();
+        if (chk.checked) {
+          selectedSaved.add(index);
+          row.classList.add('selected');
+        } else {
+          selectedSaved.delete(index);
+          row.classList.remove('selected');
+        }
+        updateSavedSelectionUI();
+      });
+      row.appendChild(chk);
+
+      // Bookmark Icon
       var ico = document.createElement('span');
       ico.className = 'ico';
       ico.appendChild(createIcon('bookmark'));
       row.appendChild(ico);
 
+      // Query Name
       var name = document.createElement('span');
       name.className = 'nm';
       name.textContent = item.name;
@@ -404,6 +454,7 @@
       });
       row.appendChild(name);
 
+      // Individual Delete Button
       var remove = document.createElement('button');
       remove.className = 'del';
       remove.appendChild(createIcon('trash'));
@@ -411,13 +462,87 @@
       remove.addEventListener('click', function (event) {
         event.stopPropagation();
         saved.splice(index, 1);
+        selectedSaved.delete(index);
         saveSaved(saved);
       });
       row.appendChild(remove);
 
+      // Drag & Drop Reordering Handlers
+      row.addEventListener('dragstart', function (event) {
+        draggedSavedIndex = index;
+        row.classList.add('dragging');
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(index));
+      });
+
+      row.addEventListener('dragover', function (event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        var rect = row.getBoundingClientRect();
+        var mid = rect.top + rect.height / 2;
+        if (event.clientY < mid) {
+          row.classList.add('drag-over-top');
+          row.classList.remove('drag-over-bottom');
+        } else {
+          row.classList.add('drag-over-bottom');
+          row.classList.remove('drag-over-top');
+        }
+      });
+
+      row.addEventListener('dragleave', function () {
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+
+      row.addEventListener('drop', function (event) {
+        event.preventDefault();
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+        if (draggedSavedIndex === null || draggedSavedIndex === index) { return; }
+
+        var rect = row.getBoundingClientRect();
+        var placeBefore = event.clientY < (rect.top + rect.height / 2);
+
+        var itemToMove = saved.splice(draggedSavedIndex, 1)[0];
+        var targetIndex = draggedSavedIndex < index
+          ? (placeBefore ? index - 1 : index)
+          : (placeBefore ? index : index + 1);
+
+        saved.splice(targetIndex, 0, itemToMove);
+        selectedSaved.clear();
+        saveSaved(saved);
+      });
+
+      row.addEventListener('dragend', function () {
+        draggedSavedIndex = null;
+        document.querySelectorAll('.saved-item').forEach(function (node) {
+          node.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+        });
+      });
+
       list.appendChild(row);
     });
   }
+
+  el('savedSelectAll').addEventListener('click', function () {
+    selectedSaved = new Set(saved.map(function (_, i) { return i; }));
+    renderSaved();
+  });
+
+  el('savedSelectNone').addEventListener('click', function () {
+    selectedSaved.clear();
+    renderSaved();
+  });
+
+  el('deleteSelectedSaved').addEventListener('click', function () {
+    if (!selectedSaved.size) { return; }
+    var count = selectedSaved.size;
+    if (!window.confirm('Delete ' + count + ' selected ' + (count === 1 ? 'query' : 'queries') + '?')) {
+      return;
+    }
+    saved = saved.filter(function (_, i) { return !selectedSaved.has(i); });
+    selectedSaved.clear();
+    saveSaved(saved);
+    el('status').textContent = 'Deleted ' + count + ' saved ' + (count === 1 ? 'query' : 'queries');
+  });
 
   el('saveCurrent').addEventListener('click', function () {
     var sql = el('sql').value.trim();
@@ -429,6 +554,83 @@
     var entry = { name: name, sql: sql, view: currentView() };
     if (existing >= 0) { saved[existing] = entry; } else { saved.push(entry); }
     saveSaved(saved);
+  });
+
+  el('exportSaved').addEventListener('click', function () {
+    if (!saved.length) {
+      showError('No saved queries to export.');
+      return;
+    }
+    var json = JSON.stringify(saved, null, 2);
+    var blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'trintrin_queries.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    showError('');
+    el('status').textContent = 'Exported ' + saved.length + ' saved ' + (saved.length === 1 ? 'query' : 'queries');
+  });
+
+  el('importSaved').addEventListener('click', function () {
+    el('importFile').value = '';
+    el('importFile').click();
+  });
+
+  el('importFile').addEventListener('change', function (event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) { return; }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var parsed = JSON.parse(e.target.result);
+        var items = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.saved) ? parsed.saved : [parsed]);
+        var valid = [];
+        items.forEach(function (item) {
+          if (item && typeof item === 'object' && typeof item.sql === 'string' && item.sql.trim()) {
+            valid.push({
+              name: String(item.name || item.sql.split('\n')[0].slice(0, 60)),
+              sql: String(item.sql),
+              view: item.view || null
+            });
+          }
+        });
+        if (!valid.length) {
+          showError('No valid queries found in imported file.');
+          return;
+        }
+        var countNew = 0, countUpdated = 0;
+        valid.forEach(function (entry) {
+          var idx = -1;
+          for (var i = 0; i < saved.length; i++) {
+            if (saved[i].name === entry.name) { idx = i; break; }
+          }
+          if (idx >= 0) {
+            saved[idx] = entry;
+            countUpdated++;
+          } else {
+            saved.push(entry);
+            countNew++;
+          }
+        });
+        selectedSaved.clear();
+        saveSaved(saved);
+        showError('');
+        var msg = 'Imported ' + valid.length + ' queries';
+        if (countUpdated && countNew) { msg += ' (' + countNew + ' new, ' + countUpdated + ' updated)'; }
+        else if (countUpdated) { msg += ' (' + countUpdated + ' updated)'; }
+        el('status').textContent = msg;
+      } catch (err) {
+        showError('Could not import queries: ' + (err.message || err));
+      }
+    };
+    reader.onerror = function () {
+      showError('Failed to read import file.');
+    };
+    reader.readAsText(file);
   });
 
   /* ---------- results: columns, filters, sorting, selection ---------- */

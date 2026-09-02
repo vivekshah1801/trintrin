@@ -137,9 +137,27 @@ button.primary svg.icon {
   color: var(--accent-fg);
 }
 
+button.bad-btn {
+  background: none;
+  color: var(--bad);
+  border-color: var(--border);
+}
+
+button.bad-btn:hover:not(:disabled) {
+  border-color: var(--bad);
+  background: var(--error-bg);
+}
+
 button:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+button.link {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  padding: 2px 4px;
 }
 
 label.check {
@@ -427,16 +445,90 @@ ul.tree ul {
   font-size: 12px;
 }
 
+.saved-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 2px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.saved-toolbar .actions {
+  display: flex;
+  gap: 4px;
+}
+
+.saved-toolbar button.link {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: var(--panel);
+}
+
+.saved-toolbar button.link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.saved-toolbar button.bad-btn {
+  font-size: 11px;
+  padding: 2px 7px;
+}
+
 .saved-item {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 3px;
+  padding: 3px 4px;
   border-radius: 5px;
+  border: 1px solid transparent;
+  user-select: none;
+  transition: background 0.1s, border-color 0.1s;
 }
 
 .saved-item:hover {
   background: var(--sunken);
+}
+
+.saved-item.selected {
+  background: var(--row-sel);
+}
+
+.saved-item.dragging {
+  opacity: 0.35;
+  background: var(--sunken);
+}
+
+.saved-item.drag-over-top {
+  border-top: 2px solid var(--accent);
+}
+
+.saved-item.drag-over-bottom {
+  border-bottom: 2px solid var(--accent);
+}
+
+.saved-item .grip {
+  cursor: grab;
+  color: var(--muted);
+  opacity: 0.45;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 1px;
+  flex: none;
+}
+
+.saved-item:hover .grip {
+  opacity: 1;
+}
+
+.saved-item .saved-check {
+  margin: 0;
+  cursor: pointer;
+  flex: none;
 }
 
 .saved-item .ico {
