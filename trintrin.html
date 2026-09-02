@@ -10,15 +10,31 @@
     --text: #14181f; --muted: #667085; --accent: #1f6feb; --accent-fg: #ffffff;
     --row-alt: #fafbfc; --row-sel: #e8f0fe; --ok: #1a7f37; --bad: #b42318;
     --error-bg: #fdecec; --error-fg: #9a2020;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --mono: ui-monospace,  monospace;
+    color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #0e1116; --panel: #161b22; --sunken: #0b0f14; --border: #2a313c;
       --text: #e6edf3; --muted: #8b949e; --accent: #388bfd; --accent-fg: #ffffff;
       --row-alt: #12171e; --row-sel: #16324d; --ok: #3fb950; --bad: #f85149;
       --error-bg: #3a1c1c; --error-fg: #ff9c9c;
+      color-scheme: dark;
     }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1116; --panel: #161b22; --sunken: #0b0f14; --border: #2a313c;
+    --text: #e6edf3; --muted: #8b949e; --accent: #388bfd; --accent-fg: #ffffff;
+    --row-alt: #12171e; --row-sel: #16324d; --ok: #3fb950; --bad: #f85149;
+    --error-bg: #3a1c1c; --error-fg: #ff9c9c;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f6f7f9; --panel: #ffffff; --sunken: #f0f2f5; --border: #d8dce3;
+    --text: #14181f; --muted: #667085; --accent: #1f6feb; --accent-fg: #ffffff;
+    --row-alt: #fafbfc; --row-sel: #e8f0fe; --ok: #1a7f37; --bad: #b42318;
+    --error-bg: #fdecec; --error-fg: #9a2020;
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
   body { margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
@@ -27,9 +43,12 @@
   input, textarea, button { font-family: inherit; font-size: 13px; color: var(--text);
          background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
   input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  button { cursor: pointer; }
+  svg.icon { display: inline-block; vertical-align: -0.15em; flex: none; stroke: currentColor; fill: none; }
+  svg.icon.fill { fill: currentColor; stroke: none; }
+  button { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
   button:hover:not(:disabled) { border-color: var(--accent); }
   button.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; font-weight: 600; }
+  button.primary svg.icon { color: var(--accent-fg); }
   button:disabled { opacity: 0.55; cursor: default; }
   button.link { border: 0; background: none; color: var(--accent); padding: 2px 4px; }
   label.check { display: flex; gap: 7px; align-items: center; color: var(--text); cursor: pointer; padding: 3px 0; }
@@ -77,19 +96,26 @@
   ul.tree ul { margin-left: 11px; border-left: 1px solid var(--border); padding-left: 6px; }
   .node { display: flex; align-items: center; gap: 4px; padding: 2px 3px; border-radius: 5px; }
   .node:hover { background: var(--sunken); }
-  .node .tw { width: 13px; flex: none; color: var(--muted); cursor: pointer; user-select: none; font-size: 10px; }
+  .node .tw { width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;
+              flex: none; color: var(--muted); cursor: pointer; user-select: none; }
+  .node .ico { width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;
+               flex: none; color: var(--muted); }
   .node .nm { flex: 1; cursor: pointer; font-family: var(--mono); font-size: 12px;
               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .node .ty { color: var(--muted); font-size: 11px; font-family: var(--mono); }
-  .node .go { opacity: 0; border: 0; background: none; color: var(--accent); padding: 0 3px; font-size: 11px; }
+  .node .go { opacity: 0; border: 0; background: none; color: var(--accent); padding: 0 3px; font-size: 11px;
+              display: inline-flex; align-items: center; justify-content: center; }
   .node:hover .go { opacity: 1; }
   .leaf .nm { cursor: default; }
   .note { color: var(--muted); padding: 6px 3px; font-size: 12px; }
 
   .saved-item { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 5px; }
   .saved-item:hover { background: var(--sunken); }
+  .saved-item .ico { width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;
+                     flex: none; color: var(--muted); }
   .saved-item .nm { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .saved-item .del { border: 0; background: none; color: var(--muted); padding: 0 4px; }
+  .saved-item .del { border: 0; background: none; color: var(--muted); padding: 0 4px;
+                     display: inline-flex; align-items: center; justify-content: center; }
   .saved-item .del:hover { color: var(--bad); }
 
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -136,7 +162,7 @@
 
 <header>
   <span class="brand">trin<span>trin</span></span>
-  <button id="toggleSide" title="Show or hide the sidebar">☰</button>
+  <button id="toggleSide" title="Show or hide the sidebar"><svg class="icon" viewBox="0 0 24 24" width="14" height="14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
   <span class="cap">Host</span>
   <input id="server" value="http://localhost:28080" spellcheck="false">
   <span class="cap">User</span>
@@ -144,12 +170,19 @@
   <button id="test">Test connection</button>
   <span id="pill"><span id="dot"></span><span id="pillText">not tested</span></span>
   <div class="pop spacer" id="settingsPop">
-    <button id="settingsBtn">⚙ Settings</button>
+    <button id="settingsBtn"><svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
     <div class="sheet">
       <h3>Settings</h3>
       <label class="check"><input type="checkbox" id="hideHudi"> Hide Hudi metadata columns by default</label>
       <div class="hint">Applies to every new result set. Columns starting with <code>_hoodie_</code> are hidden;
         you can still re-enable them per query from the Columns menu.</div>
+      <h3 style="margin-top: 12px">Theme</h3>
+      <div class="actions">
+        <button id="themeAuto"><svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Auto</button>
+        <button id="themeLight"><svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> Light</button>
+        <button id="themeDark"><svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> Dark</button>
+      </div>
+      <div class="hint">Auto follows your system theme preference (default).</div>
     </div>
   </div>
 </header>
@@ -164,7 +197,7 @@
     <div class="pane on" id="pane-explore">
       <div class="bar">
         <input id="treeFilter" type="search" placeholder="Filter loaded names…" spellcheck="false">
-        <button id="reload" title="Reload catalogs">⟳</button>
+        <button id="reload" title="Reload catalogs"><svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
       </div>
       <ul class="tree" id="tree"></ul>
       <div class="note" id="treeNote">Loading catalogs…</div>
@@ -172,7 +205,7 @@
 
     <div class="pane" id="pane-saved">
       <div class="bar">
-        <button id="saveCurrent" class="primary" style="flex:1">Save current query</button>
+        <button id="saveCurrent" class="primary" style="flex:1"><svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Save current query</button>
       </div>
       <div id="savedList"></div>
     </div>
@@ -183,7 +216,7 @@
     <div class="editor">
       <textarea id="sql" spellcheck="false" placeholder='SELECT * FROM tpch.sf1.nation LIMIT 100'></textarea>
       <div class="row">
-        <button id="run" class="primary">Run query</button>
+        <button id="run" class="primary"><svg class="icon fill" viewBox="0 0 24 24" width="11" height="11"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run query</button>
         <span class="hint">⌘/Ctrl + Enter to run</span>
       </div>
     </div>
@@ -193,7 +226,7 @@
     <div class="toolbar">
       <input id="search" type="search" placeholder="Search all visible columns…" spellcheck="false">
       <div class="pop" id="colsPop">
-        <button id="colsBtn">Columns</button>
+        <button id="colsBtn"><svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></svg> Columns</button>
         <div class="sheet">
           <h3>Visible columns</h3>
           <div class="actions">
@@ -204,8 +237,8 @@
           <div id="colsList"></div>
         </div>
       </div>
-      <button id="clear">Clear filters</button>
-      <button id="download">Download CSV</button>
+      <button id="clear"><svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Clear filters</button>
+      <button id="download"><svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download CSV</button>
       <span id="status">No query run yet</span>
     </div>
 
@@ -238,9 +271,37 @@
     columns: [], rows: [], filters: [], hidden: new Set(), widths: {},
     search: '', sort: null, selected: new Set(), view: []
   };
-  var settings = { hideHudi: true };
+  var settings = { hideHudi: true, theme: 'auto' };
   var saved = [];
   var pendingView = null;   // a saved query's view, applied once its own SQL comes back
+
+  var SVGS = {
+    sidebar: '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>',
+    settings: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    reload: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
+    play: '<svg class="icon fill" viewBox="0 0 24 24" width="11" height="11"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+    chevronRight: '<svg class="icon" viewBox="0 0 24 24" width="10" height="10" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+    chevronDown: '<svg class="icon" viewBox="0 0 24 24" width="10" height="10" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+    trash: '<svg class="icon" viewBox="0 0 24 24" width="12" height="12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    download: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    columns: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></svg>',
+    clear: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    sortAsc: '<svg class="icon" viewBox="0 0 24 24" width="10" height="10" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
+    sortDesc: '<svg class="icon" viewBox="0 0 24 24" width="10" height="10" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+    catalog: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
+    schema: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+    table: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="3" x2="12" y2="21"/></svg>',
+    column: '<svg class="icon" viewBox="0 0 24 24" width="12" height="12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
+    bookmark: '<svg class="icon" viewBox="0 0 24 24" width="13" height="13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>'
+  };
+
+  function createIcon(name) {
+    var raw = SVGS[name];
+    if (!raw) { return document.createTextNode(''); }
+    var div = document.createElement('div');
+    div.innerHTML = raw;
+    return div.firstElementChild;
+  }
 
   /* ---------- persistence (localStorage may throw in private mode) ---------- */
 
@@ -311,15 +372,30 @@
 
   /* ---------- explorer: catalogs > schemas > tables > columns ---------- */
 
+  function setTwisty(twisty, open) {
+    twisty.textContent = '';
+    twisty.appendChild(createIcon(open ? 'chevronDown' : 'chevronRight'));
+  }
+
   function makeNode(label, type, options) {
+    options = options || {};
     var li = document.createElement('li');
     var node = document.createElement('div');
     node.className = 'node' + (options.leaf ? ' leaf' : '');
 
     var twisty = document.createElement('span');
     twisty.className = 'tw';
-    twisty.textContent = options.leaf ? '' : '▸';
+    if (!options.leaf) {
+      setTwisty(twisty, false);
+    }
     node.appendChild(twisty);
+
+    if (options.icon) {
+      var ico = document.createElement('span');
+      ico.className = 'ico';
+      ico.appendChild(createIcon(options.icon));
+      node.appendChild(ico);
+    }
 
     var name = document.createElement('span');
     name.className = 'nm';
@@ -336,7 +412,7 @@
     if (options.onRun) {
       var go = document.createElement('button');
       go.className = 'go';
-      go.textContent = '▶';
+      go.appendChild(createIcon('play'));
       go.title = 'Query this table';
       go.addEventListener('click', function (event) { event.stopPropagation(); options.onRun(); });
       node.appendChild(go);
@@ -352,7 +428,7 @@
     var loaded = false;
     var toggle = function () {
       children.hidden = !children.hidden;
-      twisty.textContent = children.hidden ? '▸' : '▾';
+      setTwisty(twisty, !children.hidden);
       if (!loaded && !children.hidden) {
         loaded = true;
         var pending = document.createElement('li');
@@ -390,12 +466,13 @@
     var fqn = quote(catalog) + '.' + quote(schema) + '.' + quote(table);
     var select = 'SELECT *\nFROM ' + fqn + '\nLIMIT 100';
     return makeNode(table, '', {
+      icon: 'table',
       onSelect: function () { el('sql').value = select; store('sql', select); },
       onRun: function () { el('sql').value = select; store('sql', select); run(); },
       expand: function (children) {
         return query('DESCRIBE ' + fqn).then(function (result) {
           fill(children, result.rows, function (row) {
-            return makeNode(row[0], row[1], { leaf: true });
+            return makeNode(row[0], row[1], { leaf: true, icon: 'column' });
           });
         });
       }
@@ -404,6 +481,7 @@
 
   function schemaNode(catalog, schema) {
     return makeNode(schema, '', {
+      icon: 'schema',
       expand: function (children) {
         return query('SHOW TABLES FROM ' + quote(catalog) + '.' + quote(schema)).then(function (result) {
           fill(children, result.rows, function (row) { return tableNode(catalog, schema, row[0]); });
@@ -414,6 +492,7 @@
 
   function catalogNode(catalog) {
     return makeNode(catalog, '', {
+      icon: 'catalog',
       expand: function (children) {
         return query('SHOW SCHEMAS FROM ' + quote(catalog)).then(function (result) {
           fill(children, result.rows, function (row) { return schemaNode(catalog, row[0]); });
@@ -514,6 +593,11 @@
       var row = document.createElement('div');
       row.className = 'saved-item';
 
+      var ico = document.createElement('span');
+      ico.className = 'ico';
+      ico.appendChild(createIcon('bookmark'));
+      row.appendChild(ico);
+
       var name = document.createElement('span');
       name.className = 'nm';
       name.textContent = item.name;
@@ -530,7 +614,7 @@
 
       var remove = document.createElement('button');
       remove.className = 'del';
-      remove.textContent = '✕';
+      remove.appendChild(createIcon('trash'));
       remove.title = 'Delete';
       remove.addEventListener('click', function () {
         saved.splice(index, 1);
@@ -582,7 +666,10 @@
       label.appendChild(document.createTextNode(name));
       list.appendChild(label);
     });
-    el('colsBtn').textContent = 'Columns (' + visibleColumns().length + '/' + state.columns.length + ')';
+    var btn = el('colsBtn');
+    btn.textContent = '';
+    btn.appendChild(createIcon('columns'));
+    btn.appendChild(document.createTextNode(' Columns (' + visibleColumns().length + '/' + state.columns.length + ')'));
   }
 
   function matches(row) {
@@ -733,7 +820,7 @@
       if (state.sort && state.sort.column === index) {
         var arrow = document.createElement('span');
         arrow.className = 'arrow';
-        arrow.textContent = state.sort.direction === 'asc' ? '▲' : '▼';
+        arrow.appendChild(createIcon(state.sort.direction === 'asc' ? 'sortAsc' : 'sortDesc'));
         th.appendChild(arrow);
       }
       th.addEventListener('click', function () {
@@ -889,7 +976,9 @@
       el('status').textContent = 'Query failed';
     }).then(function () {
       button.disabled = false;
-      button.textContent = 'Run query';
+      button.textContent = '';
+      button.appendChild(createIcon('play'));
+      button.appendChild(document.createTextNode(' Run query'));
     });
   }
 
@@ -951,6 +1040,37 @@
     }
   });
 
+  /* ---------- theme (auto / light / dark) ---------- */
+
+  function applyTheme(theme) {
+    settings.theme = (theme === 'dark' || theme === 'light') ? theme : 'auto';
+    store('settings', settings);
+    if (settings.theme === 'auto') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', settings.theme);
+    }
+    updateThemeUI();
+  }
+
+  function updateThemeUI() {
+    var active = settings.theme || 'auto';
+    ['themeAuto', 'themeLight', 'themeDark'].forEach(function (id) {
+      var b = el(id);
+      if (!b) { return; }
+      var mode = id.replace('theme', '').toLowerCase();
+      if (active === mode) {
+        b.classList.add('primary');
+      } else {
+        b.classList.remove('primary');
+      }
+    });
+  }
+
+  el('themeAuto').addEventListener('click', function () { applyTheme('auto'); });
+  el('themeLight').addEventListener('click', function () { applyTheme('light'); });
+  el('themeDark').addEventListener('click', function () { applyTheme('dark'); });
+
   /* ---------- sidebar resizer ---------- */
 
   var DEFAULT_SIDE_WIDTH = 268;
@@ -1001,6 +1121,7 @@
 
   settings = load('settings', settings);
   saved = load('saved', []);
+  applyTheme(settings.theme || 'auto');
   el('hideHudi').checked = settings.hideHudi;
   el('server').value = load('server', el('server').value);
   el('user').value = load('user', el('user').value);

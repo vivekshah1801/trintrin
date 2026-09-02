@@ -28,7 +28,7 @@ Set the host and user in the header, hit **Test connection**, then write SQL and
   columns to show from the **Columns** menu.
 - **Download CSV** — exports the checked rows, or every row matching the current filters if nothing is checked.
   Only visible columns are exported.
-- **Settings** — Apache Hudi metadata columns (`_hoodie_*`) are hidden by default, since they are noise in most
+- **Settings & Theme** — choose between Auto (matches system theme, default), Light, or Dark from Settings. Apache Hudi metadata columns (`_hoodie_*`) are hidden by default, since they are noise in most
   queries. Turn that off if you want them.
 
 Host, user, last query, saved queries and settings live in `localStorage`, so they survive a reload.
