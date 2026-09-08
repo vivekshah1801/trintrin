@@ -1,6 +1,7 @@
 import { Notifier } from './webutils/notifier.js';
 import { createIcon } from './webutils/icons.js';
 import { load, store } from './webutils/storage.js';
+import { quote, text } from './webutils/sql.js';
 import { autoWidth as calcAutoWidth } from './webutils/measure.js';
 import { downloadCsv } from './webutils/csv.js';
 import { snipeCurrent } from './webutils/snipe.js';
