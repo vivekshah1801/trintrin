@@ -596,6 +596,9 @@
     if (!name) { return; }
     var existing = -1;
     for (var i = 0; i < saved.length; i++) { if (saved[i].name === name) { existing = i; } }
+    if (existing >= 0 && !window.confirm('A saved query named "' + name + '" already exists. Overwrite it?')) {
+      return;
+    }
     var entry = { name: name, sql: sql, view: currentView() };
     if (existing >= 0) { saved[existing] = entry; } else { saved.push(entry); }
     store('saved', saved);
