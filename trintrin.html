@@ -83,6 +83,7 @@
   .note { color: var(--muted); padding: 6px 3px; font-size: 12px; }
 
   .saved-item { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 5px; }
+  .saved-item[hidden] { display: none; }
   .saved-item:hover { background: var(--sunken); }
   .saved-item .nm { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .saved-item .del { border: 0; background: none; color: var(--muted); padding: 0 4px; }
@@ -157,20 +158,20 @@
 <div class="body">
   <aside id="side">
     <div class="tabs">
-      <button data-pane="explore" class="on">Explore</button>
-      <button data-pane="saved">Saved queries</button>
+      <button data-pane="saved" class="on">Saved queries</button>
+      <button data-pane="explore">Explore</button>
     </div>
 
-    <div class="pane on" id="pane-explore">
+    <div class="pane" id="pane-explore">
       <div class="bar">
         <input id="treeFilter" type="search" placeholder="Filter loaded names…" spellcheck="false">
         <button id="reload" title="Reload catalogs">⟳</button>
       </div>
       <ul class="tree" id="tree"></ul>
-      <div class="note" id="treeNote">Loading catalogs…</div>
+      <div class="note" id="treeNote">Open this tab to load catalogs…</div>
     </div>
 
-    <div class="pane" id="pane-saved">
+    <div class="pane on" id="pane-saved">
       <div class="bar">
         <button id="saveCurrent" class="primary" style="flex:1">Save current query</button>
       </div>
@@ -262,6 +263,13 @@
 
   /* ---------- helpers ---------- */
 
+  function debounce(fn, wait) {
+    var timer = null;
+    return function () {
+      clearTimeout(timer);
+      timer = setTimeout(fn, wait);
+    };
+  }
   function text(value) { return value === null || value === undefined ? '' : String(value); }
   function quote(name) { return '"' + String(name).replace(/"/g, '""') + '"'; }
   function visibleColumns() {
@@ -428,7 +436,9 @@
     });
   }
 
+  var catalogsLoaded = false;
   function loadCatalogs() {
+    catalogsLoaded = true;
     var tree = el('tree'), note = el('treeNote');
     tree.textContent = '';
     note.textContent = 'Loading catalogs…';
@@ -586,6 +596,9 @@
     if (!name) { return; }
     var existing = -1;
     for (var i = 0; i < saved.length; i++) { if (saved[i].name === name) { existing = i; } }
+    if (existing >= 0 && !window.confirm('A saved query named "' + name + '" already exists. Overwrite it?')) {
+      return;
+    }
     var entry = { name: name, sql: sql, view: currentView() };
     if (existing >= 0) { saved[existing] = entry; } else { saved.push(entry); }
     store('saved', saved);
@@ -653,6 +666,10 @@
     }
     state.view = view;
   }
+
+  // Column filters and the global search box fire on every keystroke; recompute() + renderBody()
+  // rebuild the whole table, so debounce it or fast typing on a large result set feels laggy.
+  var refreshBodyDebounced = debounce(function () { recompute(); renderBody(); }, 150);
 
   /* ---------- column widths (Excel-style drag to resize) ---------- */
 
@@ -789,8 +806,7 @@
       input.value = state.filters[index] || '';
       input.addEventListener('input', function () {
         state.filters[index] = input.value.trim().toLowerCase();
-        recompute();
-        renderBody();
+        refreshBodyDebounced();
       });
       cell.appendChild(input);
       filterRow.appendChild(cell);
@@ -945,8 +961,7 @@
   });
   el('search').addEventListener('input', function () {
     state.search = el('search').value.trim().toLowerCase();
-    recompute();
-    renderBody();
+    refreshBodyDebounced();
   });
   el('clear').addEventListener('click', function () {
     state.filters = state.columns.map(function () { return ''; });
@@ -975,6 +990,7 @@
       document.querySelectorAll('.pane').forEach(function (pane) { pane.classList.remove('on'); });
       tab.classList.add('on');
       el('pane-' + tab.dataset.pane).classList.add('on');
+      if (tab.dataset.pane === 'explore' && !catalogsLoaded) { loadCatalogs(); }
     });
   });
 
@@ -1013,7 +1029,6 @@
     history.replaceState(null, '', location.pathname);
   }
   renderSaved();
-  loadCatalogs();
 })();
 </script>
 </body>
