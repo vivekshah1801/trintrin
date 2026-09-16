@@ -157,8 +157,8 @@
 <div class="body">
   <aside id="side">
     <div class="tabs">
-      <button data-pane="explore">Explore</button>
       <button data-pane="saved" class="on">Saved queries</button>
+      <button data-pane="explore">Explore</button>
     </div>
 
     <div class="pane" id="pane-explore">
@@ -262,6 +262,13 @@
 
   /* ---------- helpers ---------- */
 
+  function debounce(fn, wait) {
+    var timer = null;
+    return function () {
+      clearTimeout(timer);
+      timer = setTimeout(fn, wait);
+    };
+  }
   function text(value) { return value === null || value === undefined ? '' : String(value); }
   function quote(name) { return '"' + String(name).replace(/"/g, '""') + '"'; }
   function visibleColumns() {
@@ -656,6 +663,10 @@
     state.view = view;
   }
 
+  // Column filters and the global search box fire on every keystroke; recompute() + renderBody()
+  // rebuild the whole table, so debounce it or fast typing on a large result set feels laggy.
+  var refreshBodyDebounced = debounce(function () { recompute(); renderBody(); }, 150);
+
   /* ---------- column widths (Excel-style drag to resize) ---------- */
 
   var measurer = document.createElement('canvas').getContext('2d');
@@ -791,8 +802,7 @@
       input.value = state.filters[index] || '';
       input.addEventListener('input', function () {
         state.filters[index] = input.value.trim().toLowerCase();
-        recompute();
-        renderBody();
+        refreshBodyDebounced();
       });
       cell.appendChild(input);
       filterRow.appendChild(cell);
@@ -947,8 +957,7 @@
   });
   el('search').addEventListener('input', function () {
     state.search = el('search').value.trim().toLowerCase();
-    recompute();
-    renderBody();
+    refreshBodyDebounced();
   });
   el('clear').addEventListener('click', function () {
     state.filters = state.columns.map(function () { return ''; });
