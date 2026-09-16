@@ -36,7 +36,8 @@
 
   header { display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
            padding: 9px 13px; background: var(--panel); border-bottom: 1px solid var(--border); }
-  .brand { font-weight: 700; letter-spacing: -0.02em; font-size: 15px; margin-right: 6px; }
+  .brand { font-weight: 700; letter-spacing: -0.02em; font-size: 15px; margin-right: 6px;
+           color: var(--text); text-decoration: none; }
   .brand span { color: var(--accent); }
   .cap { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
   #server { width: 205px; font-family: var(--mono); font-size: 12px; }
@@ -86,6 +87,8 @@
   .saved-item .nm { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .saved-item .del { border: 0; background: none; color: var(--muted); padding: 0 4px; }
   .saved-item .del:hover { color: var(--bad); }
+  .saved-item .ren { border: 0; background: none; color: var(--muted); padding: 0 4px; }
+  .saved-item .ren:hover { color: var(--accent); }
 
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .editor { padding: 9px 13px; background: var(--panel); border-bottom: 1px solid var(--border); }
@@ -123,14 +126,16 @@
   .empty { padding: 22px 14px; color: var(--muted); }
 
   footer { padding: 6px 13px; font-size: 11.5px; color: var(--muted);
-           background: var(--panel); border-top: 1px solid var(--border); }
+           background: var(--panel); border-top: 1px solid var(--border);
+           display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   footer a { color: var(--accent); }
+  footer .version { opacity: 0.6; }
 </style>
 </head>
 <body>
 
 <header>
-  <span class="brand">trin<span>trin</span></span>
+  <a class="brand" href="/" title="Home">trin<span>trin</span></a>
   <button id="toggleSide" title="Show or hide the sidebar">☰</button>
   <span class="cap">Host</span>
   <input id="server" value="http://localhost:28080" spellcheck="false">
@@ -169,6 +174,9 @@
       <div class="bar">
         <button id="saveCurrent" class="primary" style="flex:1">Save current query</button>
       </div>
+      <div class="bar">
+        <input id="savedFilter" type="search" placeholder="Search saved queries…" spellcheck="false">
+      </div>
       <div id="savedList"></div>
     </div>
   </aside>
@@ -178,6 +186,7 @@
       <textarea id="sql" spellcheck="false" placeholder='SELECT * FROM tpch.sf1.nation LIMIT 100'></textarea>
       <div class="row">
         <button id="run" class="primary">Run query</button>
+        <button id="share" title="Copy a link to this query">Share</button>
         <span class="hint">⌘/Ctrl + Enter to run</span>
       </div>
     </div>
@@ -214,7 +223,10 @@
   </main>
 </div>
 
-<footer>Made by AI, while <a href="https://github.com/vivekshah1801" target="_blank" rel="noopener noreferrer">Vivek</a> sips tea.</footer>
+<footer>
+  <span>Made by AI, while <a href="https://github.com/vivekshah1801" target="_blank" rel="noopener noreferrer">Vivek</a> sips tea.</span>
+  <span class="version">v0.1.2</span>
+</footer>
 
 <script>
 (function () {
@@ -494,6 +506,15 @@
     return bits.length ? bits.join(', ') : 'no filters or hidden columns';
   }
 
+  function applySavedFilter() {
+    var needle = el('savedFilter').value.trim().toLowerCase();
+    var items = el('savedList').querySelectorAll('.saved-item');
+    for (var i = 0; i < items.length; i++) {
+      var label = items[i].querySelector('.nm');
+      items[i].hidden = !!needle && label.textContent.toLowerCase().indexOf(needle) === -1;
+    }
+  }
+
   function renderSaved() {
     var list = el('savedList');
     list.textContent = '';
@@ -522,11 +543,30 @@
       });
       row.appendChild(name);
 
+      var rename = document.createElement('button');
+      rename.className = 'ren';
+      rename.textContent = '✎';
+      rename.title = 'Rename';
+      rename.addEventListener('click', function () {
+        var name = window.prompt('Rename query', item.name);
+        if (!name || name === item.name) { return; }
+        var collision = saved.some(function (other, otherIndex) { return otherIndex !== index && other.name === name; });
+        if (collision) {
+          el('status').textContent = 'A saved query named "' + name + '" already exists';
+          return;
+        }
+        saved[index].name = name;
+        store('saved', saved);
+        renderSaved();
+      });
+      row.appendChild(rename);
+
       var remove = document.createElement('button');
       remove.className = 'del';
       remove.textContent = '✕';
       remove.title = 'Delete';
       remove.addEventListener('click', function () {
+        if (!window.confirm('Delete saved query "' + item.name + '"?')) { return; }
         saved.splice(index, 1);
         store('saved', saved);
         renderSaved();
@@ -534,7 +574,10 @@
       row.appendChild(remove);
       list.appendChild(row);
     });
+    applySavedFilter();
   }
+
+  el('savedFilter').addEventListener('input', applySavedFilter);
 
   el('saveCurrent').addEventListener('click', function () {
     var sql = el('sql').value.trim();
@@ -890,6 +933,16 @@
   /* ---------- wiring ---------- */
 
   el('run').addEventListener('click', run);
+  el('share').addEventListener('click', function () {
+    var sql = el('sql').value.trim();
+    if (!sql) { return; }
+    var url = location.origin + location.pathname + '?sql=' + encodeURIComponent(sql);
+    navigator.clipboard.writeText(url).then(function () {
+      el('status').textContent = 'Share link copied to clipboard';
+    }).catch(function () {
+      el('status').textContent = 'Could not copy link automatically - copy it yourself: ' + url;
+    });
+  });
   el('search').addEventListener('input', function () {
     state.search = el('search').value.trim().toLowerCase();
     recompute();
@@ -953,6 +1006,12 @@
   el('server').value = load('server', el('server').value);
   el('user').value = load('user', el('user').value);
   el('sql').value = load('sql', '');
+  var sharedSql = new URLSearchParams(location.search).get('sql');
+  if (sharedSql) {
+    el('sql').value = sharedSql;
+    store('sql', sharedSql);
+    history.replaceState(null, '', location.pathname);
+  }
   renderSaved();
   loadCatalogs();
 })();
