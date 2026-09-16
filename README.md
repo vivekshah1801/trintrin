@@ -6,15 +6,26 @@ Trino builds each `nextUri` from the coordinator's own hostname. If you reach Tr
 SSH tunnel or a bastion, that hostname does not resolve on your machine and the stock `trino` CLI simply hangs.
 trintrin rewrites every `nextUri` back to the host you gave it, so queries actually finish.
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/vivekshah1801/trintrin/main/install.sh | sh
+```
+
+Drops `trintrin.py` and `trintrin.html` into `~/.trintrin/` and puts a `trintrin` launcher on
+`~/.local/bin` (add that to your `PATH` if the installer says it's missing). Needs `python3` or `uv`
+already on your machine — nothing else.
+
 ## Run
 
 ```sh
 kubectl port-forward svc/trino 28080:8080   # or whatever gets you to Trino
-uv run trintrin.py                          # UI on http://localhost:8375
+trintrin                                    # UI on http://localhost:8375
 ```
 
-`./trintrin.py` works too (the shebang shells out to `uv run --script`), as does plain `python3 trintrin.py`.
-There is nothing to install — `requirements.txt` is empty on purpose.
+Cloned the repo instead? `uv run trintrin.py` works, and so does `./trintrin.py` (the shebang shells
+out to `uv run --script`) or plain `python3 trintrin.py`. There is nothing to install — `requirements.txt`
+is empty on purpose.
 
 ## UI
 
