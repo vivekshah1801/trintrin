@@ -157,20 +157,20 @@
 <div class="body">
   <aside id="side">
     <div class="tabs">
-      <button data-pane="explore" class="on">Explore</button>
-      <button data-pane="saved">Saved queries</button>
+      <button data-pane="explore">Explore</button>
+      <button data-pane="saved" class="on">Saved queries</button>
     </div>
 
-    <div class="pane on" id="pane-explore">
+    <div class="pane" id="pane-explore">
       <div class="bar">
         <input id="treeFilter" type="search" placeholder="Filter loaded names…" spellcheck="false">
         <button id="reload" title="Reload catalogs">⟳</button>
       </div>
       <ul class="tree" id="tree"></ul>
-      <div class="note" id="treeNote">Loading catalogs…</div>
+      <div class="note" id="treeNote">Open this tab to load catalogs…</div>
     </div>
 
-    <div class="pane" id="pane-saved">
+    <div class="pane on" id="pane-saved">
       <div class="bar">
         <button id="saveCurrent" class="primary" style="flex:1">Save current query</button>
       </div>
@@ -428,7 +428,9 @@
     });
   }
 
+  var catalogsLoaded = false;
   function loadCatalogs() {
+    catalogsLoaded = true;
     var tree = el('tree'), note = el('treeNote');
     tree.textContent = '';
     note.textContent = 'Loading catalogs…';
@@ -975,6 +977,7 @@
       document.querySelectorAll('.pane').forEach(function (pane) { pane.classList.remove('on'); });
       tab.classList.add('on');
       el('pane-' + tab.dataset.pane).classList.add('on');
+      if (tab.dataset.pane === 'explore' && !catalogsLoaded) { loadCatalogs(); }
     });
   });
 
@@ -1013,7 +1016,6 @@
     history.replaceState(null, '', location.pathname);
   }
   renderSaved();
-  loadCatalogs();
 })();
 </script>
 </body>
