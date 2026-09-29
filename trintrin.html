@@ -910,9 +910,19 @@
 
   /* ---------- run ---------- */
 
+  var WRITE_KEYWORDS = /^\s*(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|MERGE|REPLACE|RENAME)\b/i;
+
+  function isWriteQuery(sql) {
+    return sql.split(';').some(function (stmt) { return WRITE_KEYWORDS.test(stmt); });
+  }
+
   function run() {
     var sql = el('sql').value.trim();
     if (!sql) { return; }
+    if (isWriteQuery(sql)) {
+      var keyword = (sql.match(WRITE_KEYWORDS) || [''])[0].trim().toUpperCase();
+      if (!window.confirm('This query starts with ' + keyword + ' and may modify data.\n\nRun it anyway?')) { return; }
+    }
     store('server', el('server').value.trim());
     store('user', el('user').value.trim());
     store('sql', sql);
