@@ -30,6 +30,8 @@
   button { cursor: pointer; }
   button:hover:not(:disabled) { border-color: var(--accent); }
   button.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; font-weight: 600; }
+  button.danger { background: #c0392b; color: #fff; border-color: transparent; font-weight: 600; }
+  button.danger:hover:not(:disabled) { background: #a93226; border-color: transparent; }
   button:disabled { opacity: 0.55; cursor: default; }
   button.link { border: 0; background: none; color: var(--accent); padding: 2px 4px; }
   label.check { display: flex; gap: 7px; align-items: center; color: var(--text); cursor: pointer; padding: 3px 0; }
@@ -187,6 +189,7 @@
       <textarea id="sql" spellcheck="false" placeholder='SELECT * FROM tpch.sf1.nation LIMIT 100'></textarea>
       <div class="row">
         <button id="run" class="primary">Run query</button>
+        <button id="stop" class="danger" hidden>Stop</button>
         <button id="share" title="Copy a link to this query">Share</button>
         <span class="hint">⌘/Ctrl + Enter to run</span>
       </div>
@@ -914,12 +917,22 @@
     store('user', el('user').value.trim());
     store('sql', sql);
 
-    var button = el('run');
-    button.disabled = true;
-    button.textContent = 'Running…';
+    var runBtn = el('run');
+    var stopBtn = el('stop');
+    runBtn.hidden = true;
+    stopBtn.hidden = false;
+    stopBtn.disabled = false;
     showError('');
     el('status').textContent = 'Running…';
     var started = Date.now();
+    var cancelled = false;
+
+    stopBtn.onclick = function () {
+      cancelled = true;
+      stopBtn.disabled = true;
+      el('status').textContent = 'Cancelling…';
+      ask(el('server').value.trim(), el('user').value.trim(), '/api/cancel', {}).catch(function () {});
+    };
 
     query(sql).then(function (result) {
       state.columns = result.columns || [];
@@ -938,11 +951,16 @@
       redraw();
       el('status').textContent = state.rows.length + ' rows in ' + (Date.now() - started) + ' ms';
     }).catch(function (error) {
-      showError(String(error.message || error));
-      el('status').textContent = 'Query failed';
+      if (cancelled) {
+        el('status').textContent = 'Query cancelled';
+      } else {
+        showError(String(error.message || error));
+        el('status').textContent = 'Query failed';
+      }
     }).then(function () {
-      button.disabled = false;
-      button.textContent = 'Run query';
+      runBtn.hidden = false;
+      stopBtn.hidden = true;
+      stopBtn.onclick = null;
     });
   }
 
@@ -1011,6 +1029,8 @@
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); run(); }
     if (event.key === 'Escape') {
       document.querySelectorAll('.pop').forEach(function (pop) { pop.classList.remove('open'); });
+      var stopBtn = el('stop');
+      if (!stopBtn.hidden && !stopBtn.disabled) { stopBtn.click(); }
     }
   });
 

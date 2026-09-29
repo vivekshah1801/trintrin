@@ -22,11 +22,15 @@ import csv
 import json
 import os
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
 import webbrowser
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+
+# Single-user tool; track cancellation state for the one in-flight query.
+_query_state = {'cancel': False, 'next_uri': None, 'lock': threading.Lock()}
 
 DEFAULT_SERVER = 'http://localhost:28080'
 DEFAULT_USER = 'trintrin'
@@ -52,12 +56,24 @@ class TrinoClient:
         request = urllib.request.Request(uri, headers={'X-Trino-User': self.user})
         return json.load(urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS))
 
+    def _delete(self, uri):
+        """Send DELETE to uri to cancel a Trino query (best-effort)."""
+        req = urllib.request.Request(uri, method='DELETE', headers={'X-Trino-User': self.user})
+        try:
+            urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS)
+        except Exception:
+            pass
+
     def info(self):
         """Returns the coordinator's /v1/info payload, used by the UI's connection test."""
         return self._get_json('{}/v1/info'.format(self.server))
 
     def run(self, sql):
         """Runs `sql` to completion and returns (columns, rows)."""
+        with _query_state['lock']:
+            _query_state['cancel'] = False
+            _query_state['next_uri'] = None
+
         request = urllib.request.Request(
             '{}/v1/statement'.format(self.server),
             data=sql.encode('utf-8'),
@@ -75,9 +91,17 @@ class TrinoClient:
             rows.extend(response.get('data') or [])
             next_uri = response.get('nextUri')
             if not next_uri:
+                with _query_state['lock']:
+                    _query_state['next_uri'] = None
                 return columns or [], rows
+            rewritten = self._rewrite(next_uri)
+            with _query_state['lock']:
+                if _query_state['cancel']:
+                    self._delete(rewritten)
+                    raise RuntimeError('Query cancelled')
+                _query_state['next_uri'] = rewritten
             time.sleep(POLL_INTERVAL_SECONDS)
-            response = self._get_json(self._rewrite(next_uri))
+            response = self._get_json(rewritten)
 
 
 class TrintrinHandler(BaseHTTPRequestHandler):
@@ -113,7 +137,7 @@ class TrintrinHandler(BaseHTTPRequestHandler):
             self._respond_json(500, {'error': 'cannot read {}: {}'.format(UI_FILE, error)})
 
     def do_POST(self):
-        if self.path not in ('/api/query', '/api/ping'):
+        if self.path not in ('/api/query', '/api/ping', '/api/cancel'):
             self._respond_json(404, {'error': 'not found'})
             return
 
@@ -124,6 +148,15 @@ class TrintrinHandler(BaseHTTPRequestHandler):
             return
 
         client = TrinoClient(request.get('server'), request.get('user'))
+
+        if self.path == '/api/cancel':
+            with _query_state['lock']:
+                _query_state['cancel'] = True
+                uri = _query_state['next_uri']
+            if uri:
+                client._delete(uri)
+            self._respond_json(200, {'ok': True})
+            return
 
         if self.path == '/api/ping':
             started = time.time()
@@ -181,7 +214,7 @@ def serve(port, open_browser):
     if open_browser:
         webbrowser.open(url)
     try:
-        HTTPServer(('127.0.0.1', port), TrintrinHandler).serve_forever()
+        ThreadingHTTPServer(('127.0.0.1', port), TrintrinHandler).serve_forever()
     except KeyboardInterrupt:
         print("\nstopped")
 
