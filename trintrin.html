@@ -59,9 +59,12 @@
   .sheet .actions { display: flex; gap: 6px; margin-bottom: 8px; }
 
   .body { flex: 1; display: flex; min-height: 0; }
-  aside { width: 268px; flex: none; display: flex; flex-direction: column;
+  aside { width: 268px; min-width: 180px; flex: none; display: flex; flex-direction: column; position: relative;
           background: var(--panel); border-right: 1px solid var(--border); }
   aside.hidden { display: none; }
+  .side-grip { position: absolute; top: 0; right: -4px; width: 7px; height: 100%; cursor: col-resize; z-index: 5; }
+  .side-grip:hover, body.side-resizing .side-grip { background: var(--accent); opacity: 0.5; }
+  body.side-resizing { cursor: col-resize; user-select: none; }
   .tabs { display: flex; border-bottom: 1px solid var(--border); }
   .tabs button { flex: 1; border: 0; border-radius: 0; background: var(--sunken); color: var(--muted);
                  padding: 7px 0; font-weight: 600; font-size: 12px; }
@@ -72,13 +75,13 @@
   .pane .bar input { flex: 1; min-width: 0; }
 
   ul.tree, ul.tree ul { list-style: none; margin: 0; padding: 0; }
+  ul.tree { width: max-content; min-width: 100%; }
   ul.tree ul { margin-left: 11px; border-left: 1px solid var(--border); padding-left: 6px; }
   .node { display: flex; align-items: center; gap: 4px; padding: 2px 3px; border-radius: 5px; }
   .node:hover { background: var(--sunken); }
   .node .tw { width: 13px; flex: none; color: var(--muted); cursor: pointer; user-select: none; font-size: 10px; }
-  .node .nm { flex: 1; cursor: pointer; font-family: var(--mono); font-size: 12px;
-              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .node .ty { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .node .nm { flex: 1 0 auto; cursor: pointer; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .node .ty { color: var(--muted); font-size: 11px; font-family: var(--mono); white-space: nowrap; padding-left: 8px; }
   .node .go { opacity: 0; border: 0; background: none; color: var(--accent); padding: 0 3px; font-size: 11px; }
   .node:hover .go { opacity: 1; }
   .leaf .nm { cursor: default; }
@@ -182,6 +185,7 @@
       </div>
       <div id="savedList"></div>
     </div>
+    <div class="side-grip" id="sideGrip" title="Drag to resize · double-click to reset"></div>
   </aside>
 
   <main>
@@ -1015,6 +1019,32 @@
     store('settings', settings);
   });
   el('toggleSide').addEventListener('click', function () { el('side').classList.toggle('hidden'); });
+
+  /* ---------- sidebar width (drag the right edge) ---------- */
+
+  var SIDE_DEFAULT = 268, SIDE_MIN = 180;
+  function setSideWidth(width) {
+    width = Math.round(Math.max(SIDE_MIN, Math.min(window.innerWidth * 0.7, width)));
+    el('side').style.width = width + 'px';
+    return width;
+  }
+  setSideWidth(load('sideWidth', SIDE_DEFAULT));
+
+  el('sideGrip').addEventListener('dblclick', function () { store('sideWidth', setSideWidth(SIDE_DEFAULT)); });
+  el('sideGrip').addEventListener('mousedown', function (event) {
+    event.preventDefault();
+    var startX = event.clientX, startWidth = el('side').getBoundingClientRect().width;
+    document.body.classList.add('side-resizing');
+    var move = function (moved) { setSideWidth(startWidth + (moved.clientX - startX)); };
+    var stop = function () {
+      document.body.classList.remove('side-resizing');
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', stop);
+      store('sideWidth', parseInt(el('side').style.width, 10));
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', stop);
+  });
 
   document.querySelectorAll('.tabs button').forEach(function (tab) {
     tab.addEventListener('click', function () {
