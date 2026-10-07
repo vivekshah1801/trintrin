@@ -977,12 +977,16 @@
   /* ---------- wiring ---------- */
 
   el('run').addEventListener('click', run);
+  var shareResetTimer = null;
   el('share').addEventListener('click', function () {
     var sql = el('sql').value.trim();
     if (!sql) { return; }
     var url = location.origin + location.pathname + '?sql=' + encodeURIComponent(sql);
     navigator.clipboard.writeText(url).then(function () {
       el('status').textContent = 'Share link copied to clipboard';
+      el('share').textContent = 'Copied!';
+      clearTimeout(shareResetTimer);
+      shareResetTimer = setTimeout(function () { el('share').textContent = 'Share'; }, 2000);
     }).catch(function () {
       el('status').textContent = 'Could not copy link automatically - copy it yourself: ' + url;
     });
