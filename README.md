@@ -10,7 +10,9 @@ curl -fsSL https://raw.githubusercontent.com/vivekshah1801/trintrin/main/install
 ```
 
 Drops `trintrin.py` and `trintrin.html` into `~/.trintrin/` and puts a `trintrin` launcher on
-`~/.local/bin` (add that to your `PATH` if the installer says it's missing). Needs `python3` or `uv`
+`~/.local/bin`. If that directory isn't on your `PATH`, the installer detects your shell (zsh, bash,
+fish, tcsh/csh, ksh, sh/dash) and adds it to the matching startup file, e.g. `~/.zshrc`. Set
+`TRINTRIN_NO_MODIFY_PATH=1` to skip that and just print the line to add. Needs `python3` or `uv`
 already on your machine.
 
 ## Run
