@@ -444,16 +444,20 @@
   }
 
   var catalogsLoaded = false;
+  var catalogsRequest = 0;   // only the latest load may fill the tree, or overlapping loads append twice
   function loadCatalogs() {
     catalogsLoaded = true;
+    var request = ++catalogsRequest;
     var tree = el('tree'), note = el('treeNote');
     tree.textContent = '';
     note.textContent = 'Loading catalogs…';
     note.hidden = false;
     query('SHOW CATALOGS').then(function (result) {
+      if (request !== catalogsRequest) { return; }
       note.hidden = true;
       result.rows.forEach(function (row) { tree.appendChild(catalogNode(row[0])); });
     }).catch(function (error) {
+      if (request !== catalogsRequest) { return; }
       note.hidden = false;
       note.textContent = 'Could not list catalogs — ' + (error.message || error);
     });
