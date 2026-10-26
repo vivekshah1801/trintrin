@@ -34,7 +34,7 @@ is empty on purpose.
 - **Results** — click a header to sort, filter per column, search across all visible columns, and pick which
   columns to show from the **Columns** menu. Drag a header edge to resize a column, or double-click it to fit
   the contents. Click a clipped cell to see its full value (JSON is pretty-printed) and copy it.
-- **Copy / Download CSV** — copies (as CSV or TSV) or downloads the checked rows, or every row matching the
+- **Copy / Download CSV** — copies or downloads (as CSV or TSV) the checked rows, or every row matching the
   current filters if nothing is checked. Only visible columns are exported. With rows checked, ⌘/Ctrl + C
   copies them as TSV, ready to paste into Excel or Google Sheets.
 - **Share Query** — Gives a embedded URL with current SQL. Paste it to a different browser tab or share
