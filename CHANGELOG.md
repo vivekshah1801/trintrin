@@ -2,6 +2,16 @@
 
 All notable changes to trintrin are listed here.
 
+## v1.4.1 — 2026-10-26
+
+### Fixes
+- **Usage stats no longer blocked by ad blockers:** the UI sends events to trintrin's own local server
+  (`/api/events`), which forwards them to PostHog in batches on a background thread. The UI gets an
+  immediate reply, so this adds no wait to anything you do; if PostHog is slow or unreachable, events are
+  dropped rather than queued without limit.
+- If sending ever fails, the page stops trying until it's reloaded, so the browser console shows at most
+  one error instead of one per action.
+
 ## v1.4.0 — 2026-10-26
 
 ### What's new

@@ -22,6 +22,7 @@ import argparse
 import csv
 import json
 import os
+import queue
 import re
 import shutil
 import subprocess
@@ -34,9 +35,17 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 
-VERSION = '1.4.0'
+VERSION = '1.4.1'
 REPO = 'vivekshah1801/trintrin'
 APP_FILES = ('trintrin.py', 'trintrin.html')
+
+# Anonymous usage events from the UI are posted to /api/events and forwarded here, so browser ad blockers
+# (which block posthog.com) don't drop them. Only this project key and endpoint are ever used.
+POSTHOG_KEY = 'phc_mHJ6A5FevUvyUaqgU2YUrbHMysFE7pwtep8RGYkHMcpa'
+POSTHOG_BATCH_URL = 'https://us.i.posthog.com/batch/'
+EVENT_FIELDS = ('event', 'distinct_id', 'timestamp', 'properties')
+EVENT_BATCH_SIZE = 50
+_events = queue.Queue(maxsize=500)   # bounded: if PostHog is slow or unreachable, extra events are dropped
 
 # Single-user tool; track cancellation state for the one in-flight query.
 _query_state = {'cancel': False, 'next_uri': None, 'lock': threading.Lock()}
@@ -117,6 +126,8 @@ class TrintrinHandler(BaseHTTPRequestHandler):
     """Serves the single-page UI and proxies its queries, so the browser only ever talks to this origin."""
 
     def log_message(self, fmt, *args):
+        if self.path == '/api/events':
+            return
         sys.stderr.write("{} {}\n".format(self.address_string(), fmt % args))
 
     def _respond(self, status, body, content_type):
@@ -135,6 +146,22 @@ class TrintrinHandler(BaseHTTPRequestHandler):
             raise ValueError('request body too large')
         return json.loads(self.rfile.read(length) or b'{}')
 
+    def _queue_event(self):
+        """Accepts one usage event and returns at once; a background thread sends it to PostHog."""
+        try:
+            event = self._read_request()
+        except ValueError:
+            self._respond_json(400, {'error': 'bad event'})
+            return
+        if not isinstance(event, dict) or not isinstance(event.get('event'), str):
+            self._respond_json(400, {'error': 'bad event'})
+            return
+        try:
+            _events.put_nowait({key: event[key] for key in EVENT_FIELDS if key in event})
+        except queue.Full:
+            pass
+        self._respond_json(202, {})
+
     def do_GET(self):
         if self.path.split('?')[0] not in ('/', '/index.html'):
             self._respond_json(404, {'error': 'not found'})
@@ -147,6 +174,9 @@ class TrintrinHandler(BaseHTTPRequestHandler):
             self._respond_json(500, {'error': 'cannot read {}: {}'.format(UI_FILE, error)})
 
     def do_POST(self):
+        if self.path == '/api/events':
+            self._queue_event()
+            return
         if self.path not in ('/api/query', '/api/ping', '/api/cancel'):
             self._respond_json(404, {'error': 'not found'})
             return
@@ -230,6 +260,33 @@ def fetch(url):
     return urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS).read()
 
 
+def post_json(url, payload):
+    """POSTs JSON to url, preferring curl for the same CA-certificate reason as fetch()."""
+    body = json.dumps(payload).encode('utf-8')
+    if shutil.which('curl'):
+        subprocess.run(['curl', '-fsS', '--max-time', str(REQUEST_TIMEOUT_SECONDS), '-X', 'POST',
+                        '-H', 'Content-Type: application/json', '--data-binary', '@-', url],
+                       input=body, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    request = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/json'})
+    urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS).read()
+
+
+def forward_events():
+    """Background loop: waits for an event, gathers whatever else is queued, sends them as one batch."""
+    while True:
+        batch = [_events.get()]
+        while len(batch) < EVENT_BATCH_SIZE:
+            try:
+                batch.append(_events.get_nowait())
+            except queue.Empty:
+                break
+        try:
+            post_json(POSTHOG_BATCH_URL, {'api_key': POSTHOG_KEY, 'batch': batch})
+        except Exception:
+            pass   # usage stats are best-effort; never surface their failures
+
+
 def upgrade():
     """Replaces this install's trintrin.py and trintrin.html with the latest GitHub release's copies."""
     app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -264,6 +321,7 @@ def upgrade():
 def serve(port, open_browser):
     url = 'http://localhost:{}'.format(port)
     print("trintrin serving {} (default Trino target {})".format(url, DEFAULT_SERVER))
+    threading.Thread(target=forward_events, daemon=True).start()
     if open_browser:
         webbrowser.open(url)
     try:
