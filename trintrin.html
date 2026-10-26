@@ -184,6 +184,8 @@
       <label class="check"><input type="checkbox" id="hideHudi"> Hide Hudi metadata columns by default</label>
       <div class="hint">Applies to every new result set. Columns starting with <code>_hoodie_</code> are hidden;
         you can still re-enable them per query from the Columns menu.</div>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="telemetry"> Send anonymous usage stats</label>
+      <div class="hint">Which features are used and when. Never your queries, table names, hosts or results.</div>
     </div>
   </div>
 </header>
@@ -307,7 +309,7 @@
     columns: [], rows: [], filters: [], hidden: new Set(), widths: {},
     search: '', sort: null, selected: new Set(), view: []
   };
-  var settings = { hideHudi: true };
+  var settings = { hideHudi: true, telemetry: true };
   var saved = [];
   var pendingView = null;   // a saved query's view, applied once its own SQL comes back
 
@@ -370,6 +372,72 @@
     return ask(el('server').value.trim(), el('user').value.trim(), '/api/query', { sql: sql });
   }
 
+  /* ---------- anonymous usage stats (PostHog), opt out in Settings ---------- */
+
+  // Events carry only a feature name and coarse counts. Never SQL, catalog/schema/table names, hosts,
+  // users, results or error text: schema names here can identify customers.
+  var POSTHOG_KEY = 'phc_mHJ6A5FevUvyUaqgU2YUrbHMysFE7pwtep8RGYkHMcpa';
+  var POSTHOG_URL = 'https://us.i.posthog.com/i/v0/e/';
+  var APP_VERSION = '{{version}}';
+  var trackedOnce = new Set();   // per result set, for per-keystroke features like filtering
+
+  function anonId() {
+    var id = load('anonId', null);
+    if (!id) {
+      id = window.crypto && crypto.randomUUID ? crypto.randomUUID()
+        : Date.now().toString(36) + Math.random().toString(36).slice(2);
+      store('anonId', id);
+    }
+    return id;
+  }
+
+  // Coarse ranges rather than exact numbers: enough to see how it's used, not what was queried.
+  function bucket(n, edges, labels) {
+    for (var i = 0; i < edges.length; i++) { if (n <= edges[i]) { return labels[i]; } }
+    return labels[labels.length - 1];
+  }
+  function rowBucket(n) {
+    return bucket(n, [0, 100, 1000, 10000, 100000], ['0', '1-100', '101-1k', '1k-10k', '10k-100k', '>100k']);
+  }
+  function msBucket(n) {
+    return bucket(n, [1000, 5000, 30000, 120000], ['<1s', '1-5s', '5-30s', '30s-2m', '>2m']);
+  }
+
+  function platform() {
+    var ua = navigator.userAgent;
+    var browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox'
+      : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Other';
+    var os = /Mac OS X/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Other';
+    return { $browser: browser, $os: os };
+  }
+
+  function track(event, props) {
+    if (settings.telemetry === false) { return; }
+    var now = new Date();
+    var properties = Object.assign({
+      $process_person_profile: false,
+      app_version: APP_VERSION,
+      local_hour: now.getHours(),
+      local_weekday: now.getDay(),
+      timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone) || ''
+    }, platform(), props || {});
+    try {
+      fetch(POSTHOG_URL, {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'text/plain' },   // a "simple" request: no CORS preflight
+        body: JSON.stringify({ api_key: POSTHOG_KEY, event: event, distinct_id: anonId(),
+                               timestamp: now.toISOString(), properties: properties })
+      }).catch(function () { /* offline or blocked: never affects the app */ });
+    } catch (e) { /* ignore */ }
+  }
+
+  function trackOnce(event, props) {
+    if (trackedOnce.has(event)) { return; }
+    trackedOnce.add(event);
+    track(event, props);
+  }
+
   /* ---------- connection test ---------- */
 
   function setPill(kind, message) {
@@ -387,8 +455,10 @@
       showError('');
       store('server', el('server').value.trim());
       store('user', el('user').value.trim());
+      track('connection_tested', { success: true });
       loadCatalogs();
     }).catch(function (error) {
+      track('connection_tested', { success: false });
       setPill('bad', 'unreachable');
       showError(String(error.message || error));
     }).then(function () { button.disabled = false; });
@@ -475,8 +545,8 @@
     var fqn = quote(catalog) + '.' + quote(schema) + '.' + quote(table);
     var select = 'SELECT *\nFROM ' + fqn + '\nLIMIT 100';
     return makeNode(table, '', {
-      onSelect: function () { el('sql').value = select; store('sql', select); },
-      onRun: function () { el('sql').value = select; store('sql', select); run(); },
+      onSelect: function () { el('sql').value = select; store('sql', select); track('table_picked', { action: 'insert' }); },
+      onRun: function () { el('sql').value = select; store('sql', select); track('table_picked', { action: 'run' }); run(); },
       expand: function (children) {
         return query('DESCRIBE ' + fqn).then(function (result) {
           fill(children, result.rows, function (row) {
@@ -622,6 +692,7 @@
         el('sql').value = item.sql;
         store('sql', item.sql);
         pendingView = item.view ? { sql: item.sql.trim(), view: item.view } : null;
+        track('saved_query_loaded');
         el('status').textContent = pendingView
           ? 'Loaded "' + item.name + '" - run it to restore ' + describeView(item.view)
           : 'Loaded "' + item.name + '"';
@@ -642,6 +713,7 @@
         }
         saved[index].name = name;
         store('saved', saved);
+        track('saved_query_renamed');
         renderSaved();
       });
       row.appendChild(rename);
@@ -654,6 +726,7 @@
         if (!window.confirm('Delete saved query "' + item.name + '"?')) { return; }
         saved.splice(index, 1);
         store('saved', saved);
+        track('saved_query_deleted');
         renderSaved();
       });
       row.appendChild(remove);
@@ -677,6 +750,7 @@
     var entry = { name: name, sql: sql, view: currentView() };
     if (existing >= 0) { saved[existing] = entry; } else { saved.push(entry); }
     store('saved', saved);
+    track('saved_query_saved', { overwrite: existing >= 0, total_saved: saved.length });
     renderSaved();
   });
 
@@ -699,6 +773,7 @@
       box.type = 'checkbox';
       box.checked = !state.hidden.has(index);
       box.addEventListener('change', function () {
+        trackOnce('columns_changed');
         if (box.checked) { state.hidden.delete(index); }
         else { state.hidden.add(index); state.filters[index] = ''; }
         redraw();
@@ -810,6 +885,7 @@
     grip.addEventListener('dblclick', function (event) {
       event.stopPropagation();
       state.widths[index] = autoWidth(index, true);
+      track('column_autofit');
       col.style.width = state.widths[index] + 'px';
       sizeTable();
     });
@@ -820,13 +896,16 @@
       var startX = event.clientX, startWidth = widthOf(index);
       document.body.classList.add('resizing');
 
+      var resized = false;
       var move = function (moved) {
+        resized = true;
         var next = Math.max(MIN_COL, Math.round(startWidth + (moved.clientX - startX)));
         state.widths[index] = next;
         col.style.width = next + 'px';
         sizeTable();
       };
       var stop = function () {
+        if (resized) { trackOnce('column_resized'); }
         document.body.classList.remove('resizing');
         document.removeEventListener('mousemove', move);
         document.removeEventListener('mouseup', stop);
@@ -874,6 +953,7 @@
         if (!state.sort || state.sort.column !== index) { state.sort = { column: index, direction: 'asc' }; }
         else if (state.sort.direction === 'asc') { state.sort = { column: index, direction: 'desc' }; }
         else { state.sort = null; }
+        trackOnce('sort_used');
         redraw();
       });
       attachGrip(th, index, cols[index]);
@@ -886,6 +966,7 @@
       input.value = state.filters[index] || '';
       input.addEventListener('input', function () {
         state.filters[index] = input.value.trim().toLowerCase();
+        trackOnce('filter_used');
         refreshBodyDebounced();
       });
       cell.appendChild(input);
@@ -988,6 +1069,7 @@
     el('cellPopMeta').textContent = (pretty !== null ? 'JSON · ' : '') + cell.text.length.toLocaleString() + ' chars';
     el('cellPopValue').textContent = pretty !== null ? pretty : cell.text;
     el('cellPopCopy').textContent = 'Copy';
+    track('cell_expanded', { json: pretty !== null });
 
     var pop = el('cellPop');
     pop.classList.add('open');
@@ -1019,6 +1101,7 @@
   el('cellPopCopy').addEventListener('click', function () {
     navigator.clipboard.writeText(popValue).then(function () {
       el('cellPopCopy').textContent = 'Copied!';
+      track('cell_copied');
     }).catch(function () {
       el('status').textContent = 'Could not copy automatically - select the text and copy it yourself';
     });
@@ -1064,11 +1147,12 @@
            (out.cols === 1 ? '' : 's') + ' as ' + format;
   }
 
-  function copyRows(sep, format) {
+  function copyRows(sep, format, via) {
     var out = exportRows(sep);
     if (!out || tooManyToCopy(out.rows)) { return; }
     navigator.clipboard.writeText(out.text).then(function () {
       flashStatus(doneMessage('Copied', out, format));
+      track('rows_copied', { format: format, via: via, selected_only: state.selected.size > 0, rows: rowBucket(out.rows) });
     }).catch(function () {
       el('status').textContent = 'Could not copy to the clipboard - use Download CSV instead';
     });
@@ -1087,6 +1171,7 @@
     document.body.removeChild(link);
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
     flashStatus(doneMessage('Downloaded', out, format));
+    track('rows_downloaded', { format: format, selected_only: state.selected.size > 0, rows: rowBucket(out.rows) });
   }
 
   // Split buttons: the main half acts in CSV, the caret opens a menu offering CSV or TSV.
@@ -1103,10 +1188,10 @@
     });
   }
 
-  el('copyCsv').addEventListener('click', function () { copyRows(',', 'CSV'); });
+  el('copyCsv').addEventListener('click', function () { copyRows(',', 'CSV', 'button'); });
   splitButton('copyPop', 'copyMenu', {
-    copyAsCsv: function () { copyRows(',', 'CSV'); },
-    copyAsTsv: function () { copyRows('\t', 'TSV'); }
+    copyAsCsv: function () { copyRows(',', 'CSV', 'menu'); },
+    copyAsTsv: function () { copyRows('\t', 'TSV', 'menu'); }
   });
   el('download').addEventListener('click', function () { downloadRows(',', 'CSV'); });
   splitButton('downloadPop', 'downloadMenu', {
@@ -1128,7 +1213,7 @@
     if (isTextField(document.activeElement) || String(window.getSelection())) { return; }
     if (!state.selected.size) { return; }
     event.preventDefault();
-    copyRows('\t', 'TSV');
+    copyRows('\t', 'TSV', 'shortcut');
   });
 
   /* ---------- run ---------- */
@@ -1162,6 +1247,7 @@
 
     stopBtn.onclick = function () {
       cancelled = true;
+      track('query_stopped');
       stopBtn.disabled = true;
       el('status').textContent = 'Cancelling…';
       ask(el('server').value.trim(), el('user').value.trim(), '/api/cancel', {}).catch(function () {});
@@ -1177,13 +1263,18 @@
       state.search = '';
       el('search').value = '';
       applyDefaultHiding();
-      if (pendingView && pendingView.sql === sql) { applyView(pendingView.view); }
+      var pendingViewApplied = pendingView && pendingView.sql === sql;
+      if (pendingViewApplied) { applyView(pendingView.view); }
       pendingView = null;
       el('empty').hidden = true;
       el('table').hidden = false;
       redraw();
       el('status').textContent = state.rows.length + ' rows in ' + (Date.now() - started) + ' ms';
+      trackedOnce = new Set();
+      track('query_run', { success: true, duration: msBucket(Date.now() - started), rows: rowBucket(state.rows.length),
+                           columns: state.columns.length, restored_view: !!(pendingViewApplied) });
     }).catch(function (error) {
+      if (!cancelled) { track('query_run', { success: false, duration: msBucket(Date.now() - started) }); }
       if (cancelled) {
         el('status').textContent = 'Query cancelled';
       } else {
@@ -1207,6 +1298,7 @@
     var url = location.origin + location.pathname + '?sql=' + encodeURIComponent(sql);
     navigator.clipboard.writeText(url).then(function () {
       flashStatus('Share link copied to clipboard');
+      track('share_link_copied');
       el('share').textContent = 'Copied!';
       clearTimeout(shareResetTimer);
       shareResetTimer = setTimeout(function () { el('share').textContent = 'Share'; }, 2000);
@@ -1216,9 +1308,11 @@
   });
   el('search').addEventListener('input', function () {
     state.search = el('search').value.trim().toLowerCase();
+    trackOnce('search_used');
     refreshBodyDebounced();
   });
   el('clear').addEventListener('click', function () {
+    track('filters_cleared');
     state.filters = state.columns.map(function () { return ''; });
     state.search = '';
     el('search').value = '';
@@ -1237,7 +1331,15 @@
     settings.hideHudi = el('hideHudi').checked;
     store('settings', settings);
   });
-  el('toggleSide').addEventListener('click', function () { el('side').classList.toggle('hidden'); });
+  el('toggleSide').addEventListener('click', function () {
+    el('side').classList.toggle('hidden');
+    track('sidebar_toggled', { visible: !el('side').classList.contains('hidden') });
+  });
+  el('telemetry').addEventListener('change', function () {
+    if (!el('telemetry').checked) { track('telemetry_disabled'); }   // last event before going quiet
+    settings.telemetry = el('telemetry').checked;
+    store('settings', settings);
+  });
 
   /* ---------- sidebar width (drag the right edge) ---------- */
 
@@ -1271,6 +1373,7 @@
       document.querySelectorAll('.pane').forEach(function (pane) { pane.classList.remove('on'); });
       tab.classList.add('on');
       el('pane-' + tab.dataset.pane).classList.add('on');
+      track('sidebar_tab_opened', { tab: tab.dataset.pane });
       if (tab.dataset.pane === 'explore' && !catalogsLoaded) { loadCatalogs(); }
     });
   });
@@ -1304,16 +1407,19 @@
   settings = load('settings', settings);
   saved = load('saved', []);
   el('hideHudi').checked = settings.hideHudi;
+  el('telemetry').checked = settings.telemetry !== false;
   el('server').value = load('server', el('server').value);
   el('user').value = load('user', el('user').value);
   el('sql').value = load('sql', '');
   var sharedSql = new URLSearchParams(location.search).get('sql');
   if (sharedSql) {
+    track('shared_link_opened');
     el('sql').value = sharedSql;
     store('sql', sharedSql);
     history.replaceState(null, '', location.pathname);
   }
   renderSaved();
+  track('app_opened', { saved_queries: saved.length });
 })();
 </script>
 </body>

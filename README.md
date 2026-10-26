@@ -42,6 +42,8 @@ is empty on purpose.
 
 Host, user, last query, saved queries and settings live in `localStorage`, so they survive a reload. Saved inside browser, never sent across the network.
 
+The web UI sends anonymous usage stats (which features are used, never queries, table names or data); turn it off in ⚙ Settings.
+
 ## CLI
 
 ```sh

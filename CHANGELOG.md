@@ -2,6 +2,14 @@
 
 All notable changes to trintrin are listed here.
 
+## v1.4.0 — 2026-10-26
+
+### What's new
+- **Anonymous usage stats:** the web UI reports which features are used (runs, copies, downloads, saved
+  queries, filters, …) with coarse counts, an anonymous random ID, app version, browser/OS and local hour.
+  Never SQL, catalog/schema/table names, hosts, users, results or error text. Turn it off in
+  ⚙ Settings → *Send anonymous usage stats*.
+
 ## v1.3.0 — 2026-10-26
 
 ### What's new
