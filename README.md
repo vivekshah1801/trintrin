@@ -53,6 +53,16 @@ echo 'SELECT 1' | uv run trintrin.py -q -
 `-s` sets the coordinator URL (default `http://localhost:28080`), `-u` the `X-Trino-User` header,
 `-p` the UI port, `--no-browser` skips opening a browser.
 
+### Upgrade
+
+```sh
+trintrin --upgrade
+```
+
+Downloads the latest [GitHub release](https://github.com/vivekshah1801/trintrin/releases) over your install
+(in `~/.trintrin`), if it is newer than yours. `trintrin --version` shows the installed version. Not for git
+checkouts — use `git pull` there.
+
 ## Notes
 
 The browser never talks to Trino directly — `trintrin.py` proxies every query, which keeps the page on a single

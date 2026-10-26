@@ -16,6 +16,9 @@ All notable changes to trintrin are listed here.
   selected text.
 - The status bar confirms each copy (e.g. `Copied 42 rows × 7 cols as CSV`); copies over 50,000 rows ask
   first.
+- **`trintrin --upgrade`:** updates your install to the latest GitHub release, if it is newer.
+  `trintrin --version` prints the installed version. (Installs older than v1.2.0 need the install script
+  re-run once to get this flag.)
 
 ## v1.1.2 — 2026-10-07
 
