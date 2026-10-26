@@ -15,19 +15,28 @@ Usage
     python trintrin.py -q 'SHOW CATALOGS'               run one query and print it
     python trintrin.py -q 'SELECT ...' -o out.csv       run one query and write a CSV
     echo 'SELECT 1' | python trintrin.py -q -           read the query from stdin
+    python trintrin.py --upgrade                        update to the latest GitHub release
 """
 
 import argparse
 import csv
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
 import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+
+VERSION = '1.2.0'
+REPO = 'vivekshah1801/trintrin'
+APP_FILES = ('trintrin.py', 'trintrin.html')
 
 # Single-user tool; track cancellation state for the one in-flight query.
 _query_state = {'cancel': False, 'next_uri': None, 'lock': threading.Lock()}
@@ -132,7 +141,8 @@ class TrintrinHandler(BaseHTTPRequestHandler):
             return
         try:
             with open(UI_FILE, 'rb') as handle:
-                self._respond(200, handle.read(), 'text/html; charset=utf-8')
+                page = handle.read().replace(b'{{version}}', VERSION.encode('ascii'))
+            self._respond(200, page, 'text/html; charset=utf-8')
         except IOError as error:
             self._respond_json(500, {'error': 'cannot read {}: {}'.format(UI_FILE, error)})
 
@@ -208,6 +218,49 @@ def print_table(columns, rows):
     print("({} rows)".format(len(rows)), file=sys.stderr)
 
 
+def version_tuple(tag):
+    return tuple(int(part) for part in re.findall(r'\d+', tag)[:3])
+
+
+def fetch(url):
+    """GETs url. Prefers curl (as install.sh does): python.org's macOS builds often lack CA certs."""
+    if shutil.which('curl'):
+        return subprocess.run(['curl', '-fsSL', '--max-time', str(REQUEST_TIMEOUT_SECONDS), url],
+                              check=True, stdout=subprocess.PIPE).stdout
+    return urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS).read()
+
+
+def upgrade():
+    """Replaces this install's trintrin.py and trintrin.html with the latest GitHub release's copies."""
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    if os.path.exists(os.path.join(app_dir, '.git')):
+        sys.exit('{} is a git checkout; update it with `git pull` instead.'.format(app_dir))
+
+    tag = json.loads(fetch('https://api.github.com/repos/{}/releases/latest'.format(REPO)))['tag_name']
+    if version_tuple(tag) <= version_tuple(VERSION):
+        print('trintrin v{} is up to date (latest release: {}).'.format(VERSION, tag))
+        return
+
+    # Download everything before touching the install, so a failed download leaves it intact.
+    staged = []
+    try:
+        for name in APP_FILES:
+            url = 'https://raw.githubusercontent.com/{}/{}/{}'.format(REPO, tag, name)
+            body = fetch(url)
+            handle, temp_path = tempfile.mkstemp(dir=app_dir, prefix='.' + name + '.')
+            with os.fdopen(handle, 'wb') as out:
+                out.write(body)
+            staged.append((temp_path, os.path.join(app_dir, name)))
+        for temp_path, final_path in staged:
+            os.chmod(temp_path, 0o755 if final_path.endswith('.py') else 0o644)
+            os.replace(temp_path, final_path)
+    finally:
+        for temp_path, _ in staged:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+    print('Upgraded trintrin v{} -> {} in {}'.format(VERSION, tag, app_dir))
+
+
 def serve(port, open_browser):
     url = 'http://localhost:{}'.format(port)
     print("trintrin serving {} (default Trino target {})".format(url, DEFAULT_SERVER))
@@ -227,9 +280,16 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--user', default=DEFAULT_USER, help='Value for the X-Trino-User header')
     parser.add_argument('-p', '--port', type=int, default=DEFAULT_PORT, help='Port to serve the UI on')
     parser.add_argument('--no-browser', action='store_true', help='Do not open a browser window on startup')
+    parser.add_argument('--upgrade', action='store_true', help='Update trintrin to the latest GitHub release')
+    parser.add_argument('--version', action='version', version='trintrin v' + VERSION)
     args = parser.parse_args()
 
-    if args.query is None:
+    if args.upgrade:
+        try:
+            upgrade()
+        except Exception as error:
+            sys.exit('Upgrade failed: {}'.format(describe(error)))
+    elif args.query is None:
         serve(args.port, not args.no_browser)
     else:
         sql = sys.stdin.read() if args.query == '-' else args.query
