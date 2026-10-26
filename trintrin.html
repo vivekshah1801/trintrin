@@ -375,10 +375,10 @@
   /* ---------- anonymous usage stats (PostHog), opt out in Settings ---------- */
 
   // Events carry only a feature name and coarse counts. Never SQL, catalog/schema/table names, hosts,
-  // users, results or error text: schema names here can identify customers.
-  var POSTHOG_KEY = 'phc_mHJ6A5FevUvyUaqgU2YUrbHMysFE7pwtep8RGYkHMcpa';
-  var POSTHOG_URL = 'https://us.i.posthog.com/i/v0/e/';
+  // users, results or error text: schema names here can identify customers. They go to our own
+  // /api/events, which forwards them to PostHog in the background.
   var APP_VERSION = '{{version}}';
+  var telemetryDown = false;   // after one failed send, stay quiet for the rest of the page load
   var trackedOnce = new Set();   // per result set, for per-keystroke features like filtering
 
   function anonId() {
@@ -412,7 +412,7 @@
   }
 
   function track(event, props) {
-    if (settings.telemetry === false) { return; }
+    if (settings.telemetry === false || telemetryDown) { return; }
     var now = new Date();
     var properties = Object.assign({
       $process_person_profile: false,
@@ -422,14 +422,16 @@
       timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone) || ''
     }, platform(), props || {});
     try {
-      fetch(POSTHOG_URL, {
+      fetch('/api/events', {
         method: 'POST',
         keepalive: true,
-        headers: { 'Content-Type': 'text/plain' },   // a "simple" request: no CORS preflight
-        body: JSON.stringify({ api_key: POSTHOG_KEY, event: event, distinct_id: anonId(),
-                               timestamp: now.toISOString(), properties: properties })
-      }).catch(function () { /* offline or blocked: never affects the app */ });
-    } catch (e) { /* ignore */ }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: event, distinct_id: anonId(), timestamp: now.toISOString(),
+                               properties: properties })
+      }).then(function (response) {
+        if (!response.ok) { telemetryDown = true; }
+      }).catch(function () { telemetryDown = true; });   // never affects the app
+    } catch (e) { telemetryDown = true; }
   }
 
   function trackOnce(event, props) {
