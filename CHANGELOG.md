@@ -2,6 +2,19 @@
 
 All notable changes to trintrin are listed here.
 
+## v1.3.0 — 2026-10-26
+
+### What's new
+- **Download as TSV:** **Download CSV ▾** now has a menu to download as CSV or TSV (`.tsv`).
+- **Copy/download confirmation:** the status bar briefly highlights "Copied …" / "Downloaded …" (and
+  "Share link copied") so it's easy to notice. Respects reduced-motion settings.
+- **GitHub link** in the footer, next to the version.
+
+### Fixes
+- ⌘/Ctrl + C now copies checked rows right after you tick them. Before, the focused checkbox counted as
+  "typing in a field" and the shortcut did nothing until you clicked elsewhere. It also works in Safari,
+  which doesn't fire a copy event when nothing is selected.
+
 ## v1.2.0 — 2026-10-26
 
 ### What's new

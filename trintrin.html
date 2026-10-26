@@ -108,7 +108,15 @@
   .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
              padding: 7px 13px; background: var(--panel); border-bottom: 1px solid var(--border); }
   #search { width: 210px; }
-  #status { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #status { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums;
+            padding: 2px 7px; border-radius: 5px; }
+  #status.flash { animation: flash 1.6s ease-out; }
+  @keyframes flash {
+    0%   { background: var(--ok); color: #fff; transform: scale(1.06); }
+    20%  { background: var(--ok); color: #fff; transform: scale(1); }
+    100% { background: transparent; color: var(--muted); }
+  }
+  @media (prefers-reduced-motion: reduce) { #status.flash { animation: none; } }
 
   .grid { flex: 1; overflow: auto; }
   table { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
@@ -245,7 +253,14 @@
           <div class="hint">Tip: tick rows, then ⌘/Ctrl + C copies them as TSV.</div>
         </div>
       </div>
-      <button id="download">Download CSV</button>
+      <div class="pop split" id="downloadPop">
+        <button id="download" title="Download selected rows (or all matching rows) as CSV">Download CSV</button>
+        <button id="downloadMenu" class="caret" title="More download formats">▾</button>
+        <div class="sheet menu">
+          <button id="downloadAsCsv">Download as CSV</button>
+          <button id="downloadAsTsv">Download as TSV</button>
+        </div>
+      </div>
       <span id="status">No query run yet</span>
     </div>
 
@@ -272,7 +287,8 @@
 
 <footer>
   <span>Made by AI, while a human sips tea.</span>
-  <span class="version">v{{version}}</span>
+  <span><a href="https://github.com/vivekshah1801/trintrin" target="_blank" rel="noopener">GitHub</a>
+    · <span class="version">v{{version}}</span></span>
 </footer>
 
 <script>
@@ -323,6 +339,15 @@
     for (var i = 0; i < state.columns.length; i++) { if (!state.hidden.has(i)) { out.push(i); } }
     return out;
   }
+  // Status text that confirms an action (copied, downloaded) gets a brief highlight so it's noticed.
+  function flashStatus(message) {
+    var status = el('status');
+    status.textContent = message;
+    status.classList.remove('flash');
+    void status.offsetWidth;   // restart the animation if it is already running
+    status.classList.add('flash');
+  }
+  el('status').addEventListener('animationend', function () { el('status').classList.remove('flash'); });
   function showError(message) {
     var box = el('error');
     box.textContent = message || '';
@@ -928,6 +953,7 @@
     if (state.selected.size) { parts.push(state.selected.size + ' selected'); }
     if (state.hidden.size) { parts.push(state.hidden.size + ' columns hidden'); }
     if (shown !== undefined && shown < state.view.length) { parts.push('showing first ' + shown); }
+    el('status').classList.remove('flash');
     el('status').textContent = parts.join(' · ');
   }
 
@@ -1033,8 +1059,8 @@
       !window.confirm('Copy ' + rows.toLocaleString() + ' rows to the clipboard? This may be slow.');
   }
 
-  function copiedMessage(out, format) {
-    return 'Copied ' + out.rows + ' row' + (out.rows === 1 ? '' : 's') + ' × ' + out.cols + ' col' +
+  function doneMessage(verb, out, format) {
+    return verb + ' ' + out.rows + ' row' + (out.rows === 1 ? '' : 's') + ' × ' + out.cols + ' col' +
            (out.cols === 1 ? '' : 's') + ' as ' + format;
   }
 
@@ -1042,47 +1068,67 @@
     var out = exportRows(sep);
     if (!out || tooManyToCopy(out.rows)) { return; }
     navigator.clipboard.writeText(out.text).then(function () {
-      el('status').textContent = copiedMessage(out, format);
+      flashStatus(doneMessage('Copied', out, format));
     }).catch(function () {
       el('status').textContent = 'Could not copy to the clipboard - use Download CSV instead';
     });
   }
 
-  el('copyCsv').addEventListener('click', function () { copyRows(',', 'CSV'); });
-  el('copyMenu').addEventListener('click', function (event) {
-    event.stopPropagation();
-    var pop = el('copyPop'), open = pop.classList.contains('open');
-    document.querySelectorAll('.pop').forEach(function (other) { other.classList.remove('open'); });
-    if (!open) { pop.classList.add('open'); }
-  });
-  el('copyAsCsv').addEventListener('click', function () { el('copyPop').classList.remove('open'); copyRows(',', 'CSV'); });
-  el('copyAsTsv').addEventListener('click', function () { el('copyPop').classList.remove('open'); copyRows('\t', 'TSV'); });
-
-  // Cmd/Ctrl+C with ticked rows copies them as TSV, unless the user is copying text they selected
-  // or is typing in an input (then the browser's normal copy wins).
-  document.addEventListener('copy', function (event) {
-    var active = document.activeElement;
-    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) { return; }
-    if (String(window.getSelection())) { return; }
-    if (!state.selected.size) { return; }
-    var out = exportRows('\t');
-    if (!out || tooManyToCopy(out.rows)) { return; }
-    event.clipboardData.setData('text/plain', out.text);
-    event.preventDefault();
-    el('status').textContent = copiedMessage(out, 'TSV');
-  });
-
-  el('download').addEventListener('click', function () {
-    var out = exportRows(',');
+  function downloadRows(sep, format) {
+    var out = exportRows(sep);
     if (!out) { return; }
-    var url = URL.createObjectURL(new Blob([out.text], { type: 'text/csv;charset=utf-8' }));
+    var type = format === 'TSV' ? 'text/tab-separated-values' : 'text/csv';
+    var url = URL.createObjectURL(new Blob([out.text], { type: type + ';charset=utf-8' }));
     var link = document.createElement('a');
     link.href = url;
-    link.download = 'trintrin_results.csv';
+    link.download = 'trintrin_results.' + format.toLowerCase();
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    flashStatus(doneMessage('Downloaded', out, format));
+  }
+
+  // Split buttons: the main half acts in CSV, the caret opens a menu offering CSV or TSV.
+  function splitButton(popId, caretId, choices) {
+    el(caretId).addEventListener('click', function (event) {
+      event.stopPropagation();
+      var pop = el(popId), open = pop.classList.contains('open');
+      document.querySelectorAll('.pop').forEach(function (other) { other.classList.remove('open'); });
+      if (!open) { pop.classList.add('open'); }
+    });
+    el(popId).querySelector('.sheet').addEventListener('click', function (event) { event.stopPropagation(); });
+    Object.keys(choices).forEach(function (id) {
+      el(id).addEventListener('click', function () { el(popId).classList.remove('open'); choices[id](); });
+    });
+  }
+
+  el('copyCsv').addEventListener('click', function () { copyRows(',', 'CSV'); });
+  splitButton('copyPop', 'copyMenu', {
+    copyAsCsv: function () { copyRows(',', 'CSV'); },
+    copyAsTsv: function () { copyRows('\t', 'TSV'); }
+  });
+  el('download').addEventListener('click', function () { downloadRows(',', 'CSV'); });
+  splitButton('downloadPop', 'downloadMenu', {
+    downloadAsCsv: function () { downloadRows(',', 'CSV'); },
+    downloadAsTsv: function () { downloadRows('\t', 'TSV'); }
+  });
+
+  function isTextField(node) {
+    if (!node) { return false; }
+    if (node.tagName === 'TEXTAREA' || node.isContentEditable) { return true; }
+    return node.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/i.test(node.type);
+  }
+
+  // Cmd/Ctrl+C with ticked rows copies them as TSV, unless the user is typing in a text field or has
+  // selected some text (then the browser's normal copy wins). Handled on keydown rather than the copy
+  // event, because Safari doesn't fire copy when nothing is selected.
+  document.addEventListener('keydown', function (event) {
+    if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'c') { return; }
+    if (isTextField(document.activeElement) || String(window.getSelection())) { return; }
+    if (!state.selected.size) { return; }
+    event.preventDefault();
+    copyRows('\t', 'TSV');
   });
 
   /* ---------- run ---------- */
@@ -1160,7 +1206,7 @@
     if (!sql) { return; }
     var url = location.origin + location.pathname + '?sql=' + encodeURIComponent(sql);
     navigator.clipboard.writeText(url).then(function () {
-      el('status').textContent = 'Share link copied to clipboard';
+      flashStatus('Share link copied to clipboard');
       el('share').textContent = 'Copied!';
       clearTimeout(shareResetTimer);
       shareResetTimer = setTimeout(function () { el('share').textContent = 'Share'; }, 2000);
@@ -1229,7 +1275,6 @@
     });
   });
 
-  el('copyPop').querySelector('.sheet').addEventListener('click', function (event) { event.stopPropagation(); });
   ['settingsPop', 'colsPop'].forEach(function (id) {
     var pop = el(id);
     pop.querySelector('button').addEventListener('click', function (event) {

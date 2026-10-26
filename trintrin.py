@@ -34,7 +34,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 
-VERSION = '1.2.0'
+VERSION = '1.3.0'
 REPO = 'vivekshah1801/trintrin'
 APP_FILES = ('trintrin.py', 'trintrin.html')
 
