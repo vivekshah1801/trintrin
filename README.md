@@ -32,9 +32,11 @@ is empty on purpose.
 - **Saved queries** — name and store queries in the browser, along with the columns you had selected and any
   filters, search and sort in effect. Click one to load it, then run it to get that view back.
 - **Results** — click a header to sort, filter per column, search across all visible columns, and pick which
-  columns to show from the **Columns** menu.
-- **Download CSV** — exports the checked rows, or every row matching the current filters if nothing is checked.
-  Only visible columns are exported.
+  columns to show from the **Columns** menu. Drag a header edge to resize a column, or double-click it to fit
+  the contents. Click a clipped cell to see its full value (JSON is pretty-printed) and copy it.
+- **Copy / Download CSV** — copies (as CSV or TSV) or downloads the checked rows, or every row matching the
+  current filters if nothing is checked. Only visible columns are exported. With rows checked, ⌘/Ctrl + C
+  copies them as TSV, ready to paste into Excel or Google Sheets.
 - **Share Query** — Gives a embedded URL with current SQL. Paste it to a different browser tab or share
   with teammate. Opens the same query by decoding the URL.
 

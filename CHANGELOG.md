@@ -1,0 +1,34 @@
+# Changelog
+
+All notable changes to trintrin are listed here.
+
+## v1.2.0 — 2026-10-26
+
+### What's new
+- **Expand a cell:** click a clipped, multi-line or JSON cell to see its full value in a popover. JSON is
+  pretty-printed, the text is selectable, and **Copy** puts the original value on the clipboard.
+  Closes on Esc, an outside click, or scrolling the grid.
+- **Fit column to contents:** double-clicking a column's resize edge now fits the full contents, up to the
+  visible grid width, instead of stopping at 460px.
+- **Copy CSV:** a new **Copy CSV ▾** button copies results as CSV, or as TSV from the menu (TSV pastes into
+  separate Excel/Google Sheets cells). It copies the same rows and columns as **Download CSV**.
+- **⌘/Ctrl + C:** with rows checked, copies them as TSV. Normal copy still works in text boxes and on
+  selected text.
+- The status bar confirms each copy (e.g. `Copied 42 rows × 7 cols as CSV`); copies over 50,000 rows ask
+  first.
+
+## v1.1.2 — 2026-10-07
+
+### What's new
+- **Stop running queries:** a Stop button (or Esc) cancels the query on the Trino side too (#10)
+- **Write-query warning:** asks for confirmation before running INSERT, UPDATE, DELETE, DROP, CREATE, ALTER,
+  TRUNCATE, MERGE, REPLACE or RENAME (#10)
+- **Saved queries:** UX improvements (#10)
+- **Explore:** long names scroll sideways, and the sidebar can be resized (#11)
+- **Installer:** detects your login shell and adds `~/.local/bin` to its PATH; set
+  `TRINTRIN_NO_MODIFY_PATH=1` to opt out (#12)
+- **Share:** the button shows "Copied!" for 2 seconds after copying the link (#13)
+- The footer no longer links to a GitHub profile (#15)
+
+### Fixes
+- Overlapping catalog loads no longer show catalogs twice in Explore (#14)

@@ -130,6 +130,26 @@
   td.null { color: var(--muted); font-style: italic; }
   .pick { width: 30px; text-align: center; padding: 4px; }
   .empty { padding: 22px 14px; color: var(--muted); }
+  tbody td.clip { cursor: zoom-in; }
+
+  .split { display: inline-flex; }
+  .split > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .split > button.caret { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; padding: 5px 6px; }
+  .menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 5px 8px; }
+  .menu button:hover { background: var(--sunken); }
+  .menu .hint { padding: 4px 8px 0; }
+
+  #cellPop { position: fixed; z-index: 40; display: none; flex-direction: column;
+             width: min(640px, 90vw); max-height: 60vh; background: var(--panel);
+             border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 26px rgba(0,0,0,0.22); }
+  #cellPop.open { display: flex; }
+  #cellPop .top { display: flex; gap: 6px; align-items: center; padding: 6px 8px 6px 11px;
+                  border-bottom: 1px solid var(--border); }
+  #cellPop .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                   font-weight: 620; }
+  #cellPop .meta { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  #cellPop pre { margin: 0; padding: 9px 11px; overflow: auto; font-family: var(--mono); font-size: 12px;
+                 white-space: pre-wrap; word-break: break-word; user-select: text; }
 
   footer { padding: 6px 13px; font-size: 11.5px; color: var(--muted);
            background: var(--panel); border-top: 1px solid var(--border);
@@ -216,11 +236,20 @@
         </div>
       </div>
       <button id="clear">Clear filters</button>
+      <div class="pop split" id="copyPop">
+        <button id="copyCsv" title="Copy selected rows (or all matching rows) as CSV">Copy CSV</button>
+        <button id="copyMenu" class="caret" title="More copy formats">▾</button>
+        <div class="sheet menu">
+          <button id="copyAsCsv">Copy as CSV</button>
+          <button id="copyAsTsv">Copy as TSV (pastes into Excel/Sheets cells)</button>
+          <div class="hint">Tip: tick rows, then ⌘/Ctrl + C copies them as TSV.</div>
+        </div>
+      </div>
       <button id="download">Download CSV</button>
       <span id="status">No query run yet</span>
     </div>
 
-    <div class="grid">
+    <div class="grid" id="grid">
       <div class="empty" id="empty">Run a query, or pick a table from the Explore panel.</div>
       <table id="table" hidden>
         <colgroup id="colgroup"></colgroup>
@@ -231,9 +260,19 @@
   </main>
 </div>
 
+<div id="cellPop" role="dialog">
+  <div class="top">
+    <span class="name" id="cellPopName"></span>
+    <span class="meta" id="cellPopMeta"></span>
+    <button id="cellPopCopy">Copy</button>
+    <button id="cellPopClose" class="link" title="Close (Esc)">✕</button>
+  </div>
+  <pre id="cellPopValue"></pre>
+</div>
+
 <footer>
   <span>Made by AI, while a human sips tea.</span>
-  <span class="version">v1.1.2</span>
+  <span class="version">v1.2.0</span>
 </footer>
 
 <script>
@@ -691,16 +730,21 @@
     return measurer.measureText(value).width;
   }
 
-  function autoWidth(index) {
+  // Initial widths cap at MAX_COL so one wide column can't push the rest off screen; an explicit
+  // double-click (fit) is allowed to grow up to the visible grid width instead.
+  function autoWidth(index, fit) {
+    var cap = fit ? Math.max(MAX_COL, el('grid').clientWidth - PICK_WIDTH) : MAX_COL;
+    var chars = fit ? 4000 : 400;
     var width = textWidth(state.columns[index], HEAD_FONT) + 34;   // padding, borders, sort arrow
     var limit = Math.min(state.rows.length, WIDTH_SAMPLE);
     for (var i = 0; i < limit; i++) {
       var value = state.rows[i][index];
       var cell = value === null || value === undefined ? 'NULL' : String(value);
-      if (cell.length > 400) { cell = cell.slice(0, 400); }
+      if (cell.length > chars) { cell = cell.slice(0, chars); }
       width = Math.max(width, textWidth(cell, CELL_FONT) + 22);
+      if (width >= cap) { break; }
     }
-    return Math.round(Math.max(MIN_COL, Math.min(MAX_COL, width)));
+    return Math.round(Math.max(MIN_COL, Math.min(cap, width)));
   }
 
   function widthOf(index) {
@@ -740,7 +784,7 @@
 
     grip.addEventListener('dblclick', function (event) {
       event.stopPropagation();
-      state.widths[index] = autoWidth(index);
+      state.widths[index] = autoWidth(index, true);
       col.style.width = state.widths[index] + 'px';
       sizeTable();
     });
@@ -834,6 +878,7 @@
     for (var n = 0; n < shown; n++) {
       var index = state.view[n], row = state.rows[index];
       var tr = document.createElement('tr');
+      tr.dataset.row = index;
       if (state.selected.has(index)) { tr.className = 'selected'; }
 
       var pick = document.createElement('td');
@@ -886,27 +931,151 @@
     el('status').textContent = parts.join(' · ');
   }
 
-  /* ---------- CSV export ---------- */
+  /* ---------- cell popover: click a clipped cell to see (and copy) its full value ---------- */
 
-  function csvCell(value) {
-    var cell = value === null || value === undefined ? '' : String(value);
-    return /[",\r\n]/.test(cell) ? '"' + cell.replace(/"/g, '""') + '"' : cell;
+  var popValue = '';
+
+  function prettyValue(value) {
+    var trimmed = value.trim();
+    if (trimmed[0] !== '{' && trimmed[0] !== '[') { return null; }
+    try { return JSON.stringify(JSON.parse(trimmed), null, 2); } catch (e) { return null; }
   }
 
-  el('download').addEventListener('click', function () {
-    if (!state.columns.length) { return; }
+  function cellValue(td) {
+    var tr = td.parentNode;
+    if (td.cellIndex < 1 || tr.dataset.row === undefined) { return null; }
+    var value = state.rows[Number(tr.dataset.row)][visibleColumns()[td.cellIndex - 1]];
+    return value === null || value === undefined ? null : { column: visibleColumns()[td.cellIndex - 1], text: String(value) };
+  }
+
+  // Cells only render one line, so anything cut off, multi-line, or JSON is worth expanding.
+  function expandable(td, cell) {
+    return td.scrollWidth > td.clientWidth || /[\r\n]/.test(cell.text) || prettyValue(cell.text) !== null;
+  }
+
+  function closeCell() { el('cellPop').classList.remove('open'); }
+
+  function openCell(td, cell) {
+    var pretty = prettyValue(cell.text);
+    popValue = cell.text;
+    el('cellPopName').textContent = state.columns[cell.column];
+    el('cellPopMeta').textContent = (pretty !== null ? 'JSON · ' : '') + cell.text.length.toLocaleString() + ' chars';
+    el('cellPopValue').textContent = pretty !== null ? pretty : cell.text;
+    el('cellPopCopy').textContent = 'Copy';
+
+    var pop = el('cellPop');
+    pop.classList.add('open');
+    var rect = td.getBoundingClientRect(), box = pop.getBoundingClientRect();
+    var left = Math.max(8, Math.min(rect.left, window.innerWidth - box.width - 8));
+    var top = rect.bottom + 4;
+    if (top + box.height > window.innerHeight - 8) { top = Math.max(8, rect.top - box.height - 4); }
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+  }
+
+  el('body').addEventListener('mouseover', function (event) {
+    var td = event.target.closest('td');
+    if (!td) { return; }
+    var cell = cellValue(td);
+    td.classList.toggle('clip', !!cell && expandable(td, cell));
+  });
+
+  el('body').addEventListener('click', function (event) {
+    var td = event.target.closest('td');
+    if (!td || !td.classList.contains('clip') || String(window.getSelection())) { return; }
+    var cell = cellValue(td);
+    if (!cell) { return; }
+    event.stopPropagation();
+    document.querySelectorAll('.pop').forEach(function (pop) { pop.classList.remove('open'); });
+    openCell(td, cell);
+  });
+
+  el('cellPopCopy').addEventListener('click', function () {
+    navigator.clipboard.writeText(popValue).then(function () {
+      el('cellPopCopy').textContent = 'Copied!';
+    }).catch(function () {
+      el('status').textContent = 'Could not copy automatically - select the text and copy it yourself';
+    });
+  });
+  el('cellPopClose').addEventListener('click', closeCell);
+  el('cellPop').addEventListener('click', function (event) { event.stopPropagation(); });
+  el('grid').addEventListener('scroll', closeCell);
+  window.addEventListener('resize', closeCell);
+
+  /* ---------- CSV export ---------- */
+
+  var COPY_CONFIRM_ROWS = 50000;
+
+  function delimitedCell(value, sep) {
+    var cell = value === null || value === undefined ? '' : String(value);
+    return /["\r\n]/.test(cell) || cell.indexOf(sep) !== -1 ? '"' + cell.replace(/"/g, '""') + '"' : cell;
+  }
+
+  // Visible columns of the selected rows, or of every matching row when nothing is selected
+  // (including rows past RENDER_CAP that aren't drawn). Null when there is nothing to export.
+  function exportRows(sep) {
+    if (!state.columns.length) { return null; }
     var visible = visibleColumns();
     var indices = state.selected.size
       ? state.view.filter(function (i) { return state.selected.has(i); })
       : state.view;
-    if (!indices.length || !visible.length) { return; }
+    if (!indices.length || !visible.length) { return null; }
 
-    var lines = [visible.map(function (i) { return csvCell(state.columns[i]); }).join(',')];
+    var lines = [visible.map(function (i) { return delimitedCell(state.columns[i], sep); }).join(sep)];
     indices.forEach(function (i) {
-      lines.push(visible.map(function (c) { return csvCell(state.rows[i][c]); }).join(','));
+      lines.push(visible.map(function (c) { return delimitedCell(state.rows[i][c], sep); }).join(sep));
     });
+    return { text: lines.join('\r\n'), rows: indices.length, cols: visible.length };
+  }
 
-    var url = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  function tooManyToCopy(rows) {
+    return rows > COPY_CONFIRM_ROWS &&
+      !window.confirm('Copy ' + rows.toLocaleString() + ' rows to the clipboard? This may be slow.');
+  }
+
+  function copiedMessage(out, format) {
+    return 'Copied ' + out.rows + ' row' + (out.rows === 1 ? '' : 's') + ' × ' + out.cols + ' col' +
+           (out.cols === 1 ? '' : 's') + ' as ' + format;
+  }
+
+  function copyRows(sep, format) {
+    var out = exportRows(sep);
+    if (!out || tooManyToCopy(out.rows)) { return; }
+    navigator.clipboard.writeText(out.text).then(function () {
+      el('status').textContent = copiedMessage(out, format);
+    }).catch(function () {
+      el('status').textContent = 'Could not copy to the clipboard - use Download CSV instead';
+    });
+  }
+
+  el('copyCsv').addEventListener('click', function () { copyRows(',', 'CSV'); });
+  el('copyMenu').addEventListener('click', function (event) {
+    event.stopPropagation();
+    var pop = el('copyPop'), open = pop.classList.contains('open');
+    document.querySelectorAll('.pop').forEach(function (other) { other.classList.remove('open'); });
+    if (!open) { pop.classList.add('open'); }
+  });
+  el('copyAsCsv').addEventListener('click', function () { el('copyPop').classList.remove('open'); copyRows(',', 'CSV'); });
+  el('copyAsTsv').addEventListener('click', function () { el('copyPop').classList.remove('open'); copyRows('\t', 'TSV'); });
+
+  // Cmd/Ctrl+C with ticked rows copies them as TSV, unless the user is copying text they selected
+  // or is typing in an input (then the browser's normal copy wins).
+  document.addEventListener('copy', function (event) {
+    var active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) { return; }
+    if (String(window.getSelection())) { return; }
+    if (!state.selected.size) { return; }
+    var out = exportRows('\t');
+    if (!out || tooManyToCopy(out.rows)) { return; }
+    event.clipboardData.setData('text/plain', out.text);
+    event.preventDefault();
+    el('status').textContent = copiedMessage(out, 'TSV');
+  });
+
+  el('download').addEventListener('click', function () {
+    var out = exportRows(',');
+    if (!out) { return; }
+    var url = URL.createObjectURL(new Blob([out.text], { type: 'text/csv;charset=utf-8' }));
     var link = document.createElement('a');
     link.href = url;
     link.download = 'trintrin_results.csv';
@@ -1060,6 +1229,7 @@
     });
   });
 
+  el('copyPop').querySelector('.sheet').addEventListener('click', function (event) { event.stopPropagation(); });
   ['settingsPop', 'colsPop'].forEach(function (id) {
     var pop = el(id);
     pop.querySelector('button').addEventListener('click', function (event) {
@@ -1072,10 +1242,12 @@
   });
   document.addEventListener('click', function () {
     document.querySelectorAll('.pop').forEach(function (pop) { pop.classList.remove('open'); });
+    closeCell();
   });
   document.addEventListener('keydown', function (event) {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); run(); }
     if (event.key === 'Escape') {
+      closeCell();
       document.querySelectorAll('.pop').forEach(function (pop) { pop.classList.remove('open'); });
       var stopBtn = el('stop');
       if (!stopBtn.hidden && !stopBtn.disabled) { stopBtn.click(); }
