@@ -1421,6 +1421,11 @@
     history.replaceState(null, '', location.pathname);
   }
   renderSaved();
+  // Once per version change, whether from auto-upgrade or `--upgrade` (app_version is the new one). Pages
+  // before v1.5.0 didn't store their version; an existing anonId marks those as upgrades from 'unknown'.
+  var lastVersion = load('version', load('anonId', null) ? 'unknown' : null);
+  if (lastVersion && lastVersion !== APP_VERSION) { track('app_upgraded', { from_version: lastVersion }); }
+  store('version', APP_VERSION);
   track('app_opened', { saved_queries: saved.length });
 })();
 </script>

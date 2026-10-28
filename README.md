@@ -57,13 +57,18 @@ echo 'SELECT 1' | uv run trintrin.py -q -
 
 ### Upgrade
 
+trintrin keeps itself up to date: at most every 3 hours, running `trintrin` checks for a newer
+[GitHub release](https://github.com/vivekshah1801/trintrin/releases), installs it over your install (in
+`~/.trintrin`) and restarts into it. If that takes more than 5 seconds, or GitHub is unreachable, it gives up
+and runs the version you have. Set
+`TRINTRIN_NO_AUTO_UPGRADE=1` to turn this off.
+
 ```sh
 trintrin --upgrade
 ```
 
-Downloads the latest [GitHub release](https://github.com/vivekshah1801/trintrin/releases) over your install
-(in `~/.trintrin`), if it is newer than yours. `trintrin --version` shows the installed version. Not for git
-checkouts — use `git pull` there.
+Upgrades right away instead of waiting for the next check. `trintrin --version` shows the installed version.
+Neither applies to git checkouts — use `git pull` there.
 
 ## Notes
 
