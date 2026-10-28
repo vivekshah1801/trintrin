@@ -15,7 +15,10 @@ Usage
     python trintrin.py -q 'SHOW CATALOGS'               run one query and print it
     python trintrin.py -q 'SELECT ...' -o out.csv       run one query and write a CSV
     echo 'SELECT 1' | python trintrin.py -q -           read the query from stdin
-    python trintrin.py --upgrade                        update to the latest GitHub release
+    python trintrin.py --upgrade                        update to the latest GitHub release now
+
+Installs also update themselves: at most every 3 hours, a run checks GitHub for a newer release, installs it and
+restarts into it; if that takes over 5 seconds it gives up and runs the installed version. Set TRINTRIN_NO_AUTO_UPGRADE=1 to turn that off.
 """
 
 import argparse
@@ -35,9 +38,12 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 
-VERSION = '1.4.1'
+VERSION = '1.5.0'
 REPO = 'vivekshah1801/trintrin'
 APP_FILES = ('trintrin.py', 'trintrin.html')
+AUTO_UPGRADE_INTERVAL_SECONDS = 3 * 60 * 60
+AUTO_UPGRADE_TIMEOUT_SECONDS = 5   # whole check + download; keeps startup snappy when GitHub is slow
+AUTO_UPGRADE_STAMP = '.last-upgrade-check'   # in the install dir; its mtime is the last check
 
 # Anonymous usage events from the UI are posted to /api/events and forwarded here, so browser ad blockers
 # (which block posthog.com) don't drop them. Only this project key and endpoint are ever used.
@@ -252,12 +258,20 @@ def version_tuple(tag):
     return tuple(int(part) for part in re.findall(r'\d+', tag)[:3])
 
 
-def fetch(url):
-    """GETs url. Prefers curl (as install.sh does): python.org's macOS builds often lack CA certs."""
+def fetch(url, deadline=None):
+    """GETs url, giving up at `deadline` (a time.time() value) if given.
+
+    Prefers curl (as install.sh does): python.org's macOS builds often lack CA certs.
+    """
+    timeout = REQUEST_TIMEOUT_SECONDS
+    if deadline is not None:
+        timeout = deadline - time.time()
+        if timeout <= 0:
+            raise TimeoutError('gave up fetching {}'.format(url))
     if shutil.which('curl'):
-        return subprocess.run(['curl', '-fsSL', '--max-time', str(REQUEST_TIMEOUT_SECONDS), url],
-                              check=True, stdout=subprocess.PIPE).stdout
-    return urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS).read()
+        return subprocess.run(['curl', '-fsSL', '--max-time', '{:.1f}'.format(max(timeout, 0.1)), url],
+                              check=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout
+    return urllib.request.urlopen(url, timeout=timeout).read()
 
 
 def post_json(url, payload):
@@ -287,27 +301,27 @@ def forward_events():
             pass   # usage stats are best-effort; never surface their failures
 
 
-def upgrade():
-    """Replaces this install's trintrin.py and trintrin.html with the latest GitHub release's copies."""
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    if os.path.exists(os.path.join(app_dir, '.git')):
-        sys.exit('{} is a git checkout; update it with `git pull` instead.'.format(app_dir))
+def app_dir():
+    return os.path.dirname(os.path.abspath(__file__))
 
-    tag = json.loads(fetch('https://api.github.com/repos/{}/releases/latest'.format(REPO)))['tag_name']
-    if version_tuple(tag) <= version_tuple(VERSION):
-        print('trintrin v{} is up to date (latest release: {}).'.format(VERSION, tag))
-        return
 
+def latest_tag(deadline=None):
+    url = 'https://api.github.com/repos/{}/releases/latest'.format(REPO)
+    return json.loads(fetch(url, deadline))['tag_name']
+
+
+def install_release(tag, deadline=None):
+    """Replaces this install's trintrin.py and trintrin.html with the copies from release `tag`."""
     # Download everything before touching the install, so a failed download leaves it intact.
     staged = []
     try:
         for name in APP_FILES:
             url = 'https://raw.githubusercontent.com/{}/{}/{}'.format(REPO, tag, name)
-            body = fetch(url)
-            handle, temp_path = tempfile.mkstemp(dir=app_dir, prefix='.' + name + '.')
+            body = fetch(url, deadline)
+            handle, temp_path = tempfile.mkstemp(dir=app_dir(), prefix='.' + name + '.')
             with os.fdopen(handle, 'wb') as out:
                 out.write(body)
-            staged.append((temp_path, os.path.join(app_dir, name)))
+            staged.append((temp_path, os.path.join(app_dir(), name)))
         for temp_path, final_path in staged:
             os.chmod(temp_path, 0o755 if final_path.endswith('.py') else 0o644)
             os.replace(temp_path, final_path)
@@ -315,7 +329,50 @@ def upgrade():
         for temp_path, _ in staged:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-    print('Upgraded trintrin v{} -> {} in {}'.format(VERSION, tag, app_dir))
+
+
+def upgrade():
+    """`--upgrade`: installs the latest GitHub release now, if it is newer than this one."""
+    if os.path.exists(os.path.join(app_dir(), '.git')):
+        sys.exit('{} is a git checkout; update it with `git pull` instead.'.format(app_dir()))
+    tag = latest_tag()
+    if version_tuple(tag) <= version_tuple(VERSION):
+        print('trintrin v{} is up to date (latest release: {}).'.format(VERSION, tag))
+        return
+    install_release(tag)
+    print('Upgraded trintrin v{} -> {} in {}'.format(VERSION, tag, app_dir()))
+
+
+def auto_upgrade():
+    """On startup, at most every 3 hours: installs a newer release if there is one, then restarts into it.
+
+    Best-effort and quiet: if the check and download together take over AUTO_UPGRADE_TIMEOUT_SECONDS, or anything
+    fails (offline, GitHub rate limit, read-only install), it just runs this version.
+    Messages go to stderr so `-q` output on stdout stays clean.
+    """
+    if os.environ.get('TRINTRIN_NO_AUTO_UPGRADE') or os.path.exists(os.path.join(app_dir(), '.git')):
+        return
+    stamp = os.path.join(app_dir(), AUTO_UPGRADE_STAMP)
+    try:
+        if time.time() - os.path.getmtime(stamp) < AUTO_UPGRADE_INTERVAL_SECONDS:
+            return
+    except OSError:
+        pass   # never checked yet
+    try:
+        # Stamp before checking, so a failing check is retried 3 hours later rather than on every run.
+        with open(stamp, 'w'):
+            pass
+        deadline = time.time() + AUTO_UPGRADE_TIMEOUT_SECONDS
+        tag = latest_tag(deadline)
+        if version_tuple(tag) <= version_tuple(VERSION):
+            return
+        install_release(tag, deadline)
+    except Exception:
+        return
+    print('trintrin auto-upgraded v{} -> {}; see https://github.com/{}/releases'.format(VERSION, tag, REPO),
+          file=sys.stderr)
+    script = os.path.join(app_dir(), 'trintrin.py')
+    os.execv(sys.executable, [sys.executable, script] + sys.argv[1:])
 
 
 def serve(port, open_browser):
@@ -338,7 +395,7 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--user', default=DEFAULT_USER, help='Value for the X-Trino-User header')
     parser.add_argument('-p', '--port', type=int, default=DEFAULT_PORT, help='Port to serve the UI on')
     parser.add_argument('--no-browser', action='store_true', help='Do not open a browser window on startup')
-    parser.add_argument('--upgrade', action='store_true', help='Update trintrin to the latest GitHub release')
+    parser.add_argument('--upgrade', action='store_true', help='Update trintrin to the latest GitHub release now')
     parser.add_argument('--version', action='version', version='trintrin v' + VERSION)
     args = parser.parse_args()
 
@@ -347,7 +404,10 @@ if __name__ == '__main__':
             upgrade()
         except Exception as error:
             sys.exit('Upgrade failed: {}'.format(describe(error)))
-    elif args.query is None:
+        sys.exit()
+
+    auto_upgrade()
+    if args.query is None:
         serve(args.port, not args.no_browser)
     else:
         sql = sys.stdin.read() if args.query == '-' else args.query

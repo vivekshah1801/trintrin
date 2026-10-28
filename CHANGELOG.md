@@ -2,6 +2,16 @@
 
 All notable changes to trintrin are listed here.
 
+## v1.5.0 — 2026-10-28
+
+### What's new
+- **Auto-upgrade:** at most every 3 hours, running `trintrin` checks for a newer GitHub release, installs it
+  and restarts into it, so new features reach everyone without `trintrin --upgrade`. If the check and download
+  take more than 5 seconds in total it gives up and runs the installed version; failures are silent. Set `TRINTRIN_NO_AUTO_UPGRADE=1` to turn it
+  off. Git checkouts are never touched. Installs older than v1.5.0 need one last `trintrin --upgrade`.
+- **Usage stats:** the UI reports `app_upgraded` (with the previous version) the first time it opens on a new
+  version. Respects the ⚙ Settings opt-out like every other event.
+
 ## v1.4.1 — 2026-10-26
 
 ### Fixes
